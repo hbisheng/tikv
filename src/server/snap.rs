@@ -1,12 +1,13 @@
 // Copyright 2016 TiKV Project Authors. Licensed under Apache-2.0.
 
 use std::{
+    collections::HashMap,
     fmt::{self, Display, Formatter},
     io::{Error as IoError, ErrorKind, Read, Write},
     pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::{Duration, Instant as StdInstant},
 };
@@ -413,6 +414,7 @@ pub struct Runner<R: RaftExtension> {
     cfg: Config,
     sending_count: Arc<AtomicUsize>,
     recving_count: Arc<AtomicUsize>,
+    // waiting_counts: Arc<Mutex<HashMap<String, Arc<AtomicUsize>>>>,
 }
 
 impl<R: RaftExtension + 'static> Runner<R> {
@@ -443,6 +445,7 @@ impl<R: RaftExtension + 'static> Runner<R> {
             cfg: config,
             sending_count: Arc::new(AtomicUsize::new(0)),
             recving_count: Arc::new(AtomicUsize::new(0)),
+            // waiting_counts: Arc::new(Mutex::new(HashMap::new())),
         };
         snap_worker
     }
@@ -557,45 +560,76 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
             Task::Send { addr, msg, cb } => {
                 fail_point!("send_snapshot");
                 let region_id = msg.get_region_id();
-                if self.sending_count.load(Ordering::SeqCst) >= self.cfg.concurrent_send_snap_limit
-                {
-                    warn!(
-                        "too many sending snapshot tasks, drop Send Snap[to: {}, snap: {:?}]",
-                        addr, msg
-                    );
-                    cb(Err(Error::Other("Too many sending snapshot tasks".into())));
-                    return;
-                }
                 SNAP_TASK_COUNTER_STATIC.send.inc();
 
                 let env = Arc::clone(&self.env);
                 let mgr = self.snap_mgr.clone();
                 let security_mgr = Arc::clone(&self.security_mgr);
                 let sending_count = Arc::clone(&self.sending_count);
-                sending_count.fetch_add(1, Ordering::SeqCst);
-                let send_task = send_snap(env, mgr, security_mgr, &self.cfg.clone(), &addr, msg);
+                let addr = addr.clone();
+                let cfg = self.cfg.clone();
+                let msg = msg.clone();
+
                 let task = async move {
-                    let res = match send_task {
-                        Err(e) => Err(e),
-                        Ok(f) => f.await,
-                    };
-                    match res {
-                        Ok(stat) => {
-                            info!(
-                                "sent snapshot";
-                                "region_id" => stat.key.region_id,
-                                "snap_key" => %stat.key,
-                                "size" => stat.total_size,
-                                "duration" => ?stat.elapsed
+                    let mut attempts = 0;
+                    let max_backoff_secs = 30;
+                    while attempts < 10 {
+                        let env2 = Arc::clone(&env);
+                        let mgr2 = mgr.clone();
+                        let security_mgr2 = Arc::clone(&security_mgr);
+                        let addr2 = addr.clone();
+                        let msg2 = msg.clone();
+
+                        if sending_count.load(Ordering::SeqCst) >= cfg.concurrent_send_snap_limit {
+                            warn!(
+                                "too many sending snapshot tasks, drop Send Snap[to: {}, snap: {:?}]",
+                                addr2, msg2
                             );
-                            cb(Ok(()));
+                            cb(Err(Error::Other("Too many sending snapshot tasks".into())));
+                            return;
                         }
-                        Err(e) => {
-                            error!("failed to send snap"; "to_addr" => addr, "region_id" => region_id, "err" => ?e);
-                            cb(Err(e));
-                        }
-                    };
-                    sending_count.fetch_sub(1, Ordering::SeqCst);
+
+                        sending_count.fetch_add(1, Ordering::SeqCst);
+                        let send_task = send_snap(env2, mgr2, security_mgr2, &cfg, &addr2, msg2);
+                        let res = match send_task {
+                            Err(e) => Err(e),
+                            Ok(f) => f.await,
+                        };
+                        sending_count.fetch_sub(1, Ordering::SeqCst);
+
+                        match res {
+                            Ok(stat) => {
+                                info!(
+                                    "sent snapshot";
+                                    "region_id" => stat.key.region_id,
+                                    "snap_key" => %stat.key,
+                                    "size" => stat.total_size,
+                                    "duration" => ?stat.elapsed
+                                );
+                                cb(Ok(()));
+                                break;
+                            }
+                            Err(e) => {
+                                if let Error::Grpc(grpcio::Error::RpcFinished(Some(ref status))) = e
+                                {
+                                    if status.code() == RpcStatusCode::RESOURCE_EXHAUSTED {
+                                        let backoff = Duration::from_secs(std::cmp::min(
+                                            2_u64.pow(attempts),
+                                            max_backoff_secs,
+                                        ));
+                                        attempts += 1;
+
+                                        tokio::time::sleep(backoff).await;
+
+                                        continue;
+                                    }
+                                }
+                                error!("failed to send snap"; "to_addr" => addr2, "region_id" => region_id, "err" => ?e);
+                                cb(Err(e));
+                                break;
+                            }
+                        };
+                    }
                 };
 
                 self.pool.spawn(task);

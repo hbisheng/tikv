@@ -554,6 +554,13 @@ where
             "request_peer" => to,
         );
 
+        // let snap_stats = self.ctx.snap_mgr.stats();
+        // if snap_stats.sending_count > 32 {
+        //     return Err(raft::Error::Store(
+        //         raft::StorageError::SnapshotTemporarilyUnavailable,
+        //     ));
+        // }
+
         let (sender, receiver) = mpsc::sync_channel(1);
         let canceled = Arc::new(AtomicBool::new(false));
         let index = Arc::new(AtomicU64::new(0));
