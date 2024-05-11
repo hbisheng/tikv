@@ -11,7 +11,7 @@ use std::{
     },
     iter::Iterator,
     mem,
-    sync::{Arc, Mutex},
+    sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
     u64,
 };
@@ -3012,6 +3012,22 @@ where
             // It's v2 only message and ignore does no harm.
             ExtraMessageType::MsgGcPeerResponse | ExtraMessageType::MsgFlushMemtable => (),
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
+            ExtraMessageType::MsgSnapshotSendPrecheckRequest => {
+                println!("on extra message: PrecheckRequest {:?}", msg);
+                let cnt = self.ctx.snap_mgr.recving_count.load(Ordering::SeqCst);
+                println!("##### recving_count -> {}", cnt);
+                if cnt == 0 {
+                    self.fsm
+                        .peer
+                        .snapshot_precheck_response(self.ctx, &msg.from_peer.unwrap())
+                }
+            }
+            ExtraMessageType::MsgSnapshotSendPrecheckResponse => {
+                println!("on extra message: PrecheckResponse {:?}", msg);
+                if let Some(gen_task) = self.fsm.peer.mut_store().mut_gen_snap_task() {
+                    gen_task.precheck_succeeded = true
+                }
+            }
         }
     }
 

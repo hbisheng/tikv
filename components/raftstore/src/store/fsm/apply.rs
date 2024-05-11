@@ -3651,6 +3651,9 @@ pub struct GenSnapTask {
     for_balance: bool,
     // the store id the snapshot will be sent to
     to_store_id: u64,
+
+    pub precheck_succeeded: bool,
+    pub to_peer: metapb::Peer,
 }
 
 impl GenSnapTask {
@@ -3660,6 +3663,7 @@ impl GenSnapTask {
         canceled: Arc<AtomicBool>,
         snap_notifier: SyncSender<RaftSnapshot>,
         to_store_id: u64,
+        to_peer: metapb::Peer,
     ) -> GenSnapTask {
         GenSnapTask {
             region_id,
@@ -3668,6 +3672,8 @@ impl GenSnapTask {
             snap_notifier,
             for_balance: false,
             to_store_id,
+            precheck_succeeded: false,
+            to_peer,
         }
     }
 
@@ -5134,7 +5140,14 @@ mod tests {
         fn new_for_test(region_id: u64, snap_notifier: SyncSender<RaftSnapshot>) -> GenSnapTask {
             let index = Arc::new(AtomicU64::new(0));
             let canceled = Arc::new(AtomicBool::new(false));
-            Self::new(region_id, index, canceled, snap_notifier, 0)
+            Self::new(
+                region_id,
+                index,
+                canceled,
+                snap_notifier,
+                0,
+                metapb::Peer::default(),
+            )
         }
     }
 

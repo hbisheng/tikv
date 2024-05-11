@@ -1925,7 +1925,6 @@ where
         let pre_commit_index = self.raft_group.raft.raft_log.committed;
         self.raft_group.step(m)?;
         self.report_commit_log_duration(pre_commit_index, &mut ctx.raft_metrics);
-
         let mut for_balance = false;
         if !has_snap_task && self.get_store().has_gen_snap_task() {
             if let Some(progress) = self.raft_group.status().progress {
@@ -2705,8 +2704,21 @@ where
 
         if !self.raft_group.has_ready() {
             fail_point!("before_no_ready_gen_snap_task", |_| None);
+            // Do some precheck here. If the snapshot task is not checked, don't start the
+            // generation. Otherwise, proceeed.
+            if let Some(gen_task) = self.mut_store().mut_gen_snap_task() {
+                if !gen_task.precheck_succeeded {
+                    // Send an extra message and wait for a callback to update gen task.
+                    let to_peer = gen_task.to_peer.clone();
+                    println!("##### sending a precheck to {:?}", to_peer);
+                    self.snapshot_precheck(ctx, &to_peer);
+                    return None;
+                }
+            }
+
             // Generating snapshot task won't set ready for raft group.
             if let Some(gen_task) = self.mut_store().take_gen_snap_task() {
+                println!("##### snapshot generation is starting");
                 self.pending_request_snapshot_count
                     .fetch_add(1, Ordering::SeqCst);
                 ctx.apply_router
@@ -2714,6 +2726,8 @@ where
             }
             return None;
         }
+
+        // println!("##### past if !raft_group.has_ready()");
 
         fail_point!(
             "before_handle_raft_ready_1003",
@@ -2788,7 +2802,20 @@ where
         // needs to be sent to the apply system.
         // Always sending snapshot task behind apply task, so it gets latest
         // snapshot.
-        if let Some(gen_task) = self.mut_store().take_gen_snap_task() {
+        let mut ready_to_proceed = false;
+        if let Some(gen_task) = self.mut_store().mut_gen_snap_task() {
+            if !gen_task.precheck_succeeded {
+                // Send an extra message and wait for a callback to update gen task.
+                let to_peer = gen_task.to_peer.clone();
+                println!("##### 222 sending a precheck to {:?}", to_peer);
+                self.snapshot_precheck(ctx, &to_peer);
+            } else {
+                println!("##### 222 snapshot generation is starting");
+                ready_to_proceed = true;
+            }
+        }
+
+        if ready_to_proceed && let Some(gen_task) = self.mut_store().take_gen_snap_task() {
             self.pending_request_snapshot_count
                 .fetch_add(1, Ordering::SeqCst);
             ctx.apply_router
@@ -5676,6 +5703,26 @@ where
             self.check_stale_conf_ver = check_conf_ver;
             self.check_stale_peers = check_peers;
         }
+    }
+
+    pub fn snapshot_precheck<T: Transport>(
+        &self,
+        ctx: &mut PollContext<EK, ER, T>,
+        to_peer: &metapb::Peer,
+    ) {
+        let mut extra_msg = ExtraMessage::default();
+        extra_msg.set_type(ExtraMessageType::MsgSnapshotSendPrecheckRequest);
+        self.send_extra_message(extra_msg, &mut ctx.trans, to_peer);
+    }
+
+    pub fn snapshot_precheck_response<T: Transport>(
+        &self,
+        ctx: &mut PollContext<EK, ER, T>,
+        to_peer: &metapb::Peer,
+    ) {
+        let mut extra_msg = ExtraMessage::default();
+        extra_msg.set_type(ExtraMessageType::MsgSnapshotSendPrecheckResponse);
+        self.send_extra_message(extra_msg, &mut ctx.trans, to_peer);
     }
 
     pub fn send_want_rollback_merge<T: Transport>(

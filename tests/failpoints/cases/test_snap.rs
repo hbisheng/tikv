@@ -1047,3 +1047,80 @@ fn test_send_snapshot_timeout() {
     fail::remove("snap_send_timer_delay");
     fail::remove("snap_send_duration_timeout");
 }
+
+#[test]
+fn test_snapshot_receiver_busy() {
+    let mut cluster = new_server_cluster(0, 3);
+    // Test that a snapshot generation is paused when the receiver is busy. To
+    // trigger the scenario, two regions are set up to send snapshots to the
+    // same store concurrently while configuring the receiving limit to 1.
+    cluster.cfg.server.concurrent_recv_snap_limit = 1;
+
+    cluster.cfg.rocksdb.titan.enabled = Some(true);
+    cluster.cfg.raft_store.raft_log_gc_tick_interval = ReadableDuration::secs(60);
+
+    let pd_client = Arc::clone(&cluster.pd_client);
+    // Disable default max peer count check.
+    pd_client.disable_default_operator();
+
+    let r1 = cluster.run_conf_change();
+    cluster.must_put(b"k1", b"v1");
+    cluster.must_put(b"k3", b"v3");
+
+    // Do a split to create the second region.
+    let region = cluster.get_region(b"k1");
+    cluster.must_split(&region, b"k2");
+
+    let r2 = cluster.get_region(b"k1").id;
+
+    for region in vec![r1, r2] {
+        // Force peer 2 to be followers all the way.
+        cluster.add_send_filter(CloneFilterFactory(
+            RegionPacketFilter::new(region, 2)
+                .msg_type(MessageType::MsgRequestVote)
+                .direction(Direction::Send),
+        ));
+    }
+
+    // When a snapshot receiver is busy, we want the snapshot generation to
+    // pause and wait for the receiver is available. For the two regions in
+    // this test, there should only be two snapshot generations in total.
+    fail::cfg("before_region_gen_snap", "2*print()->panic()").unwrap();
+
+    // Pause the failpoint to stall the first snapshot send task.
+    fail::cfg("receiving_snapshot_net_error", "pause").unwrap();
+    pd_client.must_add_peer(r1, new_peer(2, 2));
+
+    // Wait for the first snapshot to be received and paused.
+    let (tx, rx) = mpsc::channel();
+    let tx = Mutex::new(tx);
+    fail::cfg_callback("receiving_snapshot_callback", move || {
+        let _ = tx.lock().unwrap().send(());
+    })
+    .unwrap();
+    rx.recv_timeout(Duration::from_secs(2)).unwrap();
+
+    // Add region 2 to store 2. But it will be failing the precheck and can't get a
+    // snapshot.
+    pd_client.must_add_peer(r2, new_peer(2, 1002));
+
+    thread::sleep(Duration::from_millis(2000));
+    // must_get_none(&cluster.get_engine(2), b"k1");
+    // must_get_none(&cluster.get_engine(2), b"k3"); // <--- bad
+
+    // Unblock the first snapshot task, which will eventually unblock the second
+    // one.
+    fail::remove("receiving_snapshot_net_error");
+
+    // Ensure that both regions work.
+    must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
+    must_get_equal(&cluster.get_engine(2), b"k3", b"v3");
+
+    cluster.must_put(b"k11", b"v11");
+    must_get_equal(&cluster.get_engine(2), b"k11", b"v11");
+
+    cluster.must_put(b"k4", b"v4");
+    must_get_equal(&cluster.get_engine(2), b"k4", b"v4");
+
+    fail::remove("before_region_gen_snap");
+}

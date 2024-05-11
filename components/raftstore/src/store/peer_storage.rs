@@ -506,6 +506,9 @@ where
                 Ok(s) if !last_canceled => {
                     *snap_state = SnapState::Relax;
                     *tried_cnt = 0;
+                    println!(
+                        "##### snapshot generation is done. returning Ok(s) in PeerStorage::snapshot()"
+                    );
                     if self.validate_snap(&s, request_index) {
                         info!("start sending snapshot"; "region_id" => self.region.get_id(),
                             "peer_id" => self.peer_id, "request_peer" => to,);
@@ -563,14 +566,23 @@ where
             receiver,
         };
 
-        let store_id = self
+        let to_peer = self
             .region()
             .get_peers()
             .iter()
             .find(|p| p.id == to)
-            .map(|p| p.store_id)
-            .unwrap_or(0);
-        let task = GenSnapTask::new(self.region.get_id(), index, canceled, sender, store_id);
+            .unwrap_or(&metapb::Peer::default())
+            .clone();
+        let store_id = to_peer.store_id;
+
+        let task = GenSnapTask::new(
+            self.region.get_id(),
+            index,
+            canceled,
+            sender,
+            store_id,
+            to_peer,
+        );
 
         let mut gen_snap_task = self.gen_snap_task.borrow_mut();
         assert!(gen_snap_task.is_none());

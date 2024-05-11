@@ -1433,22 +1433,15 @@ struct SnapManagerCore {
 }
 
 /// `SnapManagerCore` trace all current processing snapshots.
+#[derive(Clone)]
 pub struct SnapManager {
     core: SnapManagerCore,
     max_total_size: Arc<AtomicU64>,
 
     // only used to receive snapshot from v2
     tablet_snap_manager: Option<TabletSnapManager>,
-}
 
-impl Clone for SnapManager {
-    fn clone(&self) -> Self {
-        SnapManager {
-            core: self.core.clone(),
-            max_total_size: self.max_total_size.clone(),
-            tablet_snap_manager: self.tablet_snap_manager.clone(),
-        }
-    }
+    pub recving_count: Arc<AtomicUsize>,
 }
 
 impl SnapManager {
@@ -2040,6 +2033,7 @@ impl SnapManagerBuilder {
             },
             max_total_size: Arc::new(AtomicU64::new(max_total_size)),
             tablet_snap_manager,
+            recving_count: Arc::new(AtomicUsize::new(0)),
         };
         snapshot.set_max_per_file_size(self.max_per_file_size); // set actual max_per_file_size
         snapshot
