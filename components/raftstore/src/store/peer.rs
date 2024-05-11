@@ -2710,7 +2710,6 @@ where
                 if !gen_task.precheck_succeeded {
                     // Send an extra message and wait for a callback to update gen task.
                     let to_peer = gen_task.to_peer.clone();
-                    println!("##### sending a precheck to {:?}", to_peer);
                     self.snapshot_precheck(ctx, &to_peer);
                     return None;
                 }
@@ -2718,7 +2717,6 @@ where
 
             // Generating snapshot task won't set ready for raft group.
             if let Some(gen_task) = self.mut_store().take_gen_snap_task() {
-                println!("##### snapshot generation is starting");
                 self.pending_request_snapshot_count
                     .fetch_add(1, Ordering::SeqCst);
                 ctx.apply_router
@@ -2807,10 +2805,8 @@ where
             if !gen_task.precheck_succeeded {
                 // Send an extra message and wait for a callback to update gen task.
                 let to_peer = gen_task.to_peer.clone();
-                println!("##### 222 sending a precheck to {:?}", to_peer);
                 self.snapshot_precheck(ctx, &to_peer);
             } else {
-                println!("##### 222 snapshot generation is starting");
                 ready_to_proceed = true;
             }
         }

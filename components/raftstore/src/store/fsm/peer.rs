@@ -3013,17 +3013,16 @@ where
             ExtraMessageType::MsgGcPeerResponse | ExtraMessageType::MsgFlushMemtable => (),
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
             ExtraMessageType::MsgSnapshotSendPrecheckRequest => {
-                println!("on extra message: PrecheckRequest {:?}", msg);
+                // TODO: fetch the concurrent_recv_snap_limit from the server config
+                let concurrent_recv_snap_limit = 1;
                 let cnt = self.ctx.snap_mgr.recving_count.load(Ordering::SeqCst);
-                println!("##### recving_count -> {}", cnt);
-                if cnt == 0 {
+                if cnt < concurrent_recv_snap_limit {
                     self.fsm
                         .peer
                         .snapshot_precheck_response(self.ctx, &msg.from_peer.unwrap())
                 }
             }
             ExtraMessageType::MsgSnapshotSendPrecheckResponse => {
-                println!("on extra message: PrecheckResponse {:?}", msg);
                 if let Some(gen_task) = self.fsm.peer.mut_store().mut_gen_snap_task() {
                     gen_task.precheck_succeeded = true
                 }

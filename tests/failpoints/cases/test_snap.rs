@@ -1083,8 +1083,8 @@ fn test_snapshot_receiver_busy() {
     }
 
     // When a snapshot receiver is busy, we want the snapshot generation to
-    // pause and wait for the receiver is available. For the two regions in
-    // this test, there should only be two snapshot generations in total.
+    // pause and wait until the receiver becomes available. For the two regions
+    // in this test, there should only be two snapshot generations in total.
     fail::cfg("before_region_gen_snap", "2*print()->panic()").unwrap();
 
     // Pause the failpoint to stall the first snapshot send task.
@@ -1104,12 +1104,12 @@ fn test_snapshot_receiver_busy() {
     // snapshot.
     pd_client.must_add_peer(r2, new_peer(2, 1002));
 
-    thread::sleep(Duration::from_millis(2000));
+    thread::sleep(Duration::from_millis(1000));
     // must_get_none(&cluster.get_engine(2), b"k1");
-    // must_get_none(&cluster.get_engine(2), b"k3"); // <--- bad
+    // must_get_none(&cluster.get_engine(2), b"k3");
 
-    // Unblock the first snapshot task, which will eventually unblock the second
-    // one.
+    // Unblock the first snapshot task, which will eventually unblock the
+    // second one.
     fail::remove("receiving_snapshot_net_error");
 
     // Ensure that both regions work.

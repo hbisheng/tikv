@@ -506,9 +506,6 @@ where
                 Ok(s) if !last_canceled => {
                     *snap_state = SnapState::Relax;
                     *tried_cnt = 0;
-                    println!(
-                        "##### snapshot generation is done. returning Ok(s) in PeerStorage::snapshot()"
-                    );
                     if self.validate_snap(&s, request_index) {
                         info!("start sending snapshot"; "region_id" => self.region.get_id(),
                             "peer_id" => self.peer_id, "request_peer" => to,);

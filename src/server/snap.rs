@@ -442,7 +442,6 @@ impl<R: RaftExtension + 'static> Runner<R> {
             cfg_tracker,
             cfg: config,
             sending_count: Arc::new(AtomicUsize::new(0)),
-            // recving_count: Arc::new(AtomicUsize::new(0)),
         };
         snap_worker
     }
@@ -502,11 +501,9 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 let raft_router = self.raft_router.clone();
                 let recving_count = Arc::clone(&self.snap_mgr.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
-                println!("##### recving_count++");
                 let task = async move {
                     let result = recv_snap(stream, sink, snap_mgr, raft_router).await;
                     recving_count.fetch_sub(1, Ordering::SeqCst);
-                    println!("##### recving_count--");
                     if let Err(e) = result {
                         error!("failed to recv snapshot"; "err" => %e);
                     }
