@@ -11,7 +11,7 @@ use std::{
     },
     iter::Iterator,
     mem,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
     u64,
 };
@@ -3014,17 +3014,23 @@ where
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
             ExtraMessageType::MsgSnapshotSendPrecheckRequest => {
                 // TODO: fetch the concurrent_recv_snap_limit from the server config
-                let concurrent_recv_snap_limit = 1;
-                let cnt = self.ctx.snap_mgr.recving_count.load(Ordering::SeqCst);
-                if cnt < concurrent_recv_snap_limit {
-                    self.fsm
-                        .peer
-                        .snapshot_precheck_response(self.ctx, &msg.from_peer.unwrap())
-                }
+                let approved = self.ctx.snap_mgr.open_connection();
+                println!("received precheck request, approved: {}", approved);
+                self.fsm.peer.snapshot_precheck_response(
+                    self.ctx,
+                    &msg.from_peer.unwrap(),
+                    approved,
+                )
             }
             ExtraMessageType::MsgSnapshotSendPrecheckResponse => {
-                if let Some(gen_task) = self.fsm.peer.mut_store().mut_gen_snap_task() {
-                    gen_task.precheck_succeeded = true
+                println!(
+                    "received precheck RESPONSE, token: {}",
+                    msg.get_extra_msg().get_snapshot_send_token()
+                );
+                if msg.get_extra_msg().get_snapshot_send_token() != "" {
+                    if let Some(gen_task) = self.fsm.peer.mut_store().mut_gen_snap_task() {
+                        gen_task.precheck_succeeded = true
+                    }
                 }
             }
         }

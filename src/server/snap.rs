@@ -413,6 +413,7 @@ pub struct Runner<R: RaftExtension> {
     cfg_tracker: Tracker<Config>,
     cfg: Config,
     sending_count: Arc<AtomicUsize>,
+    recving_count: Arc<AtomicUsize>,
 }
 
 impl<R: RaftExtension + 'static> Runner<R> {
@@ -442,6 +443,7 @@ impl<R: RaftExtension + 'static> Runner<R> {
             cfg_tracker,
             cfg: config,
             sending_count: Arc::new(AtomicUsize::new(0)),
+            recving_count: Arc::new(AtomicUsize::new(0)),
         };
         snap_worker
     }
@@ -468,7 +470,7 @@ impl<R: RaftExtension + 'static> Runner<R> {
     }
 
     fn receiving_busy(&self) -> Option<RpcStatus> {
-        let task_num = self.snap_mgr.recving_count.load(Ordering::SeqCst);
+        let task_num = self.recving_count.load(Ordering::SeqCst);
         if task_num >= self.cfg.concurrent_recv_snap_limit {
             warn!("too many recving snapshot tasks, ignore");
             return Some(RpcStatus::with_message(
@@ -499,7 +501,7 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
 
                 let snap_mgr = self.snap_mgr.clone();
                 let raft_router = self.raft_router.clone();
-                let recving_count = Arc::clone(&self.snap_mgr.recving_count);
+                let recving_count = Arc::clone(&self.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
                 let task = async move {
                     let result = recv_snap(stream, sink, snap_mgr, raft_router).await;
@@ -531,7 +533,7 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 SNAP_TASK_COUNTER_STATIC.recv_v2.inc();
 
                 let raft_router = self.raft_router.clone();
-                let recving_count = self.snap_mgr.recving_count.clone();
+                let recving_count = self.recving_count.clone();
                 recving_count.fetch_add(1, Ordering::SeqCst);
                 let limiter = self.snap_mgr.limiter().clone();
                 let snap_mgr_v1 = self.snap_mgr.clone();

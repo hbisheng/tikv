@@ -2725,8 +2725,6 @@ where
             return None;
         }
 
-        // println!("##### past if !raft_group.has_ready()");
-
         fail_point!(
             "before_handle_raft_ready_1003",
             self.peer.get_id() == 1003 && self.is_leader(),
@@ -5715,9 +5713,15 @@ where
         &self,
         ctx: &mut PollContext<EK, ER, T>,
         to_peer: &metapb::Peer,
+        passed: bool,
     ) {
         let mut extra_msg = ExtraMessage::default();
         extra_msg.set_type(ExtraMessageType::MsgSnapshotSendPrecheckResponse);
+        if passed {
+            extra_msg.set_snapshot_send_token("unstoppable".to_string());
+        } else {
+            extra_msg.set_snapshot_send_token("".to_string());
+        }
         self.send_extra_message(extra_msg, &mut ctx.trans, to_peer);
     }
 

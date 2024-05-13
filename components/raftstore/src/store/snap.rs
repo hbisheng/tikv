@@ -2,6 +2,7 @@
 use std::{
     borrow::Cow,
     cmp::{self, Ordering as CmpOrdering, Reverse},
+    collections::VecDeque,
     error::Error as StdError,
     fmt::{self, Display, Formatter},
     io::{self, ErrorKind, Read, Write},
@@ -11,7 +12,9 @@ use std::{
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
-    thread, time, u64,
+    thread,
+    time::{self, Duration},
+    u64,
 };
 
 use collections::{HashMap, HashMapEntry as Entry};
@@ -1441,7 +1444,9 @@ pub struct SnapManager {
     // only used to receive snapshot from v2
     tablet_snap_manager: Option<TabletSnapManager>,
 
-    pub recving_count: Arc<AtomicUsize>,
+    connection_limit: usize,
+    connection_ttl_in_secs: u64,
+    connection_timestamps: Arc<Mutex<VecDeque<Instant>>>,
 }
 
 impl SnapManager {
@@ -1481,6 +1486,40 @@ impl SnapManager {
         }
 
         Ok(())
+    }
+
+    pub fn open_connection(&self) -> bool {
+        let mut timestamps = self.connection_timestamps.lock().unwrap();
+        let current_time = Instant::now();
+        self.close_expired_connections(&mut timestamps, current_time);
+
+        if timestamps.len() < self.connection_limit {
+            timestamps.push_back(current_time);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn close_expired_connections(
+        &self,
+        timestamps: &mut VecDeque<Instant>,
+        current_time: Instant,
+    ) {
+        while let Some(&timestamp) = timestamps.front() {
+            if current_time.duration_since(timestamp)
+                > Duration::from_secs(self.connection_ttl_in_secs)
+            {
+                timestamps.pop_front();
+            } else {
+                // The rest of the connections are newer and not expired
+                break;
+            }
+        }
+    }
+
+    pub fn close_connection(&self) {
+        self.connection_timestamps.lock().unwrap().pop_front();
     }
 
     // [PerformanceCriticalPath]?? I/O involved API should be called in background
@@ -2033,7 +2072,9 @@ impl SnapManagerBuilder {
             },
             max_total_size: Arc::new(AtomicU64::new(max_total_size)),
             tablet_snap_manager,
-            recving_count: Arc::new(AtomicUsize::new(0)),
+            connection_limit: 1,
+            connection_ttl_in_secs: 5,
+            connection_timestamps: Arc::new(Mutex::new(VecDeque::new())),
         };
         snapshot.set_max_per_file_size(self.max_per_file_size); // set actual max_per_file_size
         snapshot
