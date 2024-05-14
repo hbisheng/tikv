@@ -2842,7 +2842,7 @@ dependencies = [
 [[package]]
 name = "kvproto"
 version = "0.0.2"
-source = "git+https://github.com/hbisheng/kvproto?branch=snapshot-send-reserve#50f61e6c0b3c8765d3beda72d34cf94213ed5249"
+source = "git+https://github.com/hbisheng/kvproto?branch=snapshot-send-reserve#d350e602299232c55570b5bc495478fad3a989b6"
 dependencies = [
  "futures 0.3.15",
  "grpcio",

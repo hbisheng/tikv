@@ -1428,6 +1428,7 @@ struct SnapManagerCore {
 
     registry: Arc<RwLock<HashMap<SnapKey, Vec<SnapEntry>>>>,
     limiter: Limiter,
+    recv_conn_limiter: Arc<SnapRecvConnLimiter>,
     temp_sst_id: Arc<AtomicU64>,
     encryption_key_manager: Option<Arc<DataKeyManager>>,
     max_per_file_size: Arc<AtomicU64>,
@@ -1443,10 +1444,6 @@ pub struct SnapManager {
 
     // only used to receive snapshot from v2
     tablet_snap_manager: Option<TabletSnapManager>,
-
-    connection_limit: usize,
-    connection_ttl_in_secs: u64,
-    connection_timestamps: Arc<Mutex<VecDeque<Instant>>>,
 }
 
 impl SnapManager {
@@ -1486,40 +1483,6 @@ impl SnapManager {
         }
 
         Ok(())
-    }
-
-    pub fn open_connection(&self) -> bool {
-        let mut timestamps = self.connection_timestamps.lock().unwrap();
-        let current_time = Instant::now();
-        self.close_expired_connections(&mut timestamps, current_time);
-
-        if timestamps.len() < self.connection_limit {
-            timestamps.push_back(current_time);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn close_expired_connections(
-        &self,
-        timestamps: &mut VecDeque<Instant>,
-        current_time: Instant,
-    ) {
-        while let Some(&timestamp) = timestamps.front() {
-            if current_time.duration_since(timestamp)
-                > Duration::from_secs(self.connection_ttl_in_secs)
-            {
-                timestamps.pop_front();
-            } else {
-                // The rest of the connections are newer and not expired
-                break;
-            }
-        }
-    }
-
-    pub fn close_connection(&self) {
-        self.connection_timestamps.lock().unwrap().pop_front();
     }
 
     // [PerformanceCriticalPath]?? I/O involved API should be called in background
@@ -1901,6 +1864,14 @@ impl SnapManager {
     pub fn limiter(&self) -> &Limiter {
         &self.core.limiter
     }
+
+    pub fn recv_snap_precheck(&self) -> bool {
+        self.core.recv_conn_limiter.try_open_connection()
+    }
+
+    pub fn recv_snap_complete(&self) {
+        self.core.recv_conn_limiter.close_connection()
+    }
 }
 
 impl SnapManagerCore {
@@ -1998,6 +1969,56 @@ impl SnapManagerCore {
     }
 }
 
+#[derive(Clone)]
+pub struct SnapRecvConnLimiter {
+    connection_limit: usize,
+    connection_ttl_in_secs: u64,
+    connection_timestamps: Arc<Mutex<VecDeque<Instant>>>,
+}
+
+impl SnapRecvConnLimiter{
+    pub fn new(connection_limit: usize, connection_ttl_in_secs: u64) -> Self {
+        SnapRecvConnLimiter{
+            connection_limit,
+            connection_ttl_in_secs,
+            connection_timestamps: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    pub fn try_open_connection(&self) -> bool {
+        let mut timestamps = self.connection_timestamps.lock().unwrap();
+        let current_time = Instant::now();
+        self.close_expired_connections(&mut timestamps, current_time);
+
+        if timestamps.len() < self.connection_limit {
+            timestamps.push_back(current_time);
+            return true;
+        } 
+        false
+    }
+
+    fn close_expired_connections(
+        &self,
+        timestamps: &mut VecDeque<Instant>,
+        current_time: Instant,
+    ) {
+        while let Some(&timestamp) = timestamps.front() {
+            if current_time.duration_since(timestamp)
+                > Duration::from_secs(self.connection_ttl_in_secs)
+            {
+                timestamps.pop_front();
+            } else {
+                // The rest of the connections are newer and not expired
+                break;
+            }
+        }
+    }
+
+    pub fn close_connection(&self) {
+        self.connection_timestamps.lock().unwrap().pop_front();
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct SnapManagerBuilder {
     max_write_bytes_per_sec: i64,
@@ -2062,6 +2083,7 @@ impl SnapManagerBuilder {
                 base: path,
                 registry: Default::default(),
                 limiter,
+                recv_conn_limiter: Arc::new(SnapRecvConnLimiter::new(1, 15)),
                 temp_sst_id: Arc::new(AtomicU64::new(0)),
                 encryption_key_manager: self.key_manager,
                 max_per_file_size: Arc::new(AtomicU64::new(u64::MAX)),
@@ -2072,9 +2094,6 @@ impl SnapManagerBuilder {
             },
             max_total_size: Arc::new(AtomicU64::new(max_total_size)),
             tablet_snap_manager,
-            connection_limit: 1,
-            connection_ttl_in_secs: 5,
-            connection_timestamps: Arc::new(Mutex::new(VecDeque::new())),
         };
         snapshot.set_max_per_file_size(self.max_per_file_size); // set actual max_per_file_size
         snapshot
@@ -2552,6 +2571,7 @@ pub mod tests {
         SnapManagerCore {
             base: path.to_owned(),
             registry: Default::default(),
+            recv_conn_limiter: Arc::new(SnapRecvConnLimiter::new(1, 15)),
             limiter: Limiter::new(f64::INFINITY),
             temp_sst_id: Arc::new(AtomicU64::new(0)),
             encryption_key_manager: None,

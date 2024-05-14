@@ -3014,20 +3014,20 @@ where
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
             ExtraMessageType::MsgSnapshotSendPrecheckRequest => {
                 // TODO: fetch the concurrent_recv_snap_limit from the server config
-                let approved = self.ctx.snap_mgr.open_connection();
-                println!("received precheck request, approved: {}", approved);
+                let result = self.ctx.snap_mgr.recv_snap_precheck();
+                println!("received precheck request, result: {}", result);
                 self.fsm.peer.snapshot_precheck_response(
                     self.ctx,
                     &msg.from_peer.unwrap(),
-                    approved,
+                    result,
                 )
             }
             ExtraMessageType::MsgSnapshotSendPrecheckResponse => {
                 println!(
                     "received precheck RESPONSE, token: {}",
-                    msg.get_extra_msg().get_snapshot_send_token()
+                    msg.get_extra_msg().get_snapshot_precheck_passed(),
                 );
-                if msg.get_extra_msg().get_snapshot_send_token() != "" {
+                if msg.get_extra_msg().get_snapshot_precheck_passed() {
                     if let Some(gen_task) = self.fsm.peer.mut_store().mut_gen_snap_task() {
                         gen_task.precheck_succeeded = true
                     }

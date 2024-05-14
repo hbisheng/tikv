@@ -1123,4 +1123,5 @@ fn test_snapshot_receiver_busy() {
     must_get_equal(&cluster.get_engine(2), b"k4", b"v4");
 
     fail::remove("before_region_gen_snap");
+    fail::remove("receiving_snapshot_callback");
 }

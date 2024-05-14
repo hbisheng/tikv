@@ -570,14 +570,12 @@ where
             .find(|p| p.id == to)
             .unwrap_or(&metapb::Peer::default())
             .clone();
-        let store_id = to_peer.store_id;
 
         let task = GenSnapTask::new(
             self.region.get_id(),
             index,
             canceled,
             sender,
-            store_id,
             to_peer,
         );
 

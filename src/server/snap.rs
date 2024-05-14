@@ -504,8 +504,9 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 let recving_count = Arc::clone(&self.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
                 let task = async move {
-                    let result = recv_snap(stream, sink, snap_mgr, raft_router).await;
+                    let result = recv_snap(stream, sink, snap_mgr.clone(), raft_router).await;
                     recving_count.fetch_sub(1, Ordering::SeqCst);
+                    snap_mgr.recv_snap_complete();
                     if let Err(e) = result {
                         error!("failed to recv snapshot"; "err" => %e);
                     }

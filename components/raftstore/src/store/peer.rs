@@ -5717,11 +5717,7 @@ where
     ) {
         let mut extra_msg = ExtraMessage::default();
         extra_msg.set_type(ExtraMessageType::MsgSnapshotSendPrecheckResponse);
-        if passed {
-            extra_msg.set_snapshot_send_token("unstoppable".to_string());
-        } else {
-            extra_msg.set_snapshot_send_token("".to_string());
-        }
+        extra_msg.set_snapshot_precheck_passed(passed);
         self.send_extra_message(extra_msg, &mut ctx.trans, to_peer);
     }
 
