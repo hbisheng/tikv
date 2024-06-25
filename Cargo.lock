@@ -2913,7 +2913,7 @@ dependencies = [
 [[package]]
 name = "librocksdb_sys"
 version = "0.1.0"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#ca1f1dd279856ff8d07ab9e81f3ae65da9d89288"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#8f75f428edd9993c3f9d9980f2b45ea1db5a73ee"
 dependencies = [
  "bindgen 0.65.1",
  "bzip2-sys",
@@ -2932,7 +2932,7 @@ dependencies = [
 [[package]]
 name = "libtitan_sys"
 version = "0.0.1"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#ca1f1dd279856ff8d07ab9e81f3ae65da9d89288"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#8f75f428edd9993c3f9d9980f2b45ea1db5a73ee"
 dependencies = [
  "bzip2-sys",
  "cc",
@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.3.0"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#ca1f1dd279856ff8d07ab9e81f3ae65da9d89288"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=upgrade-rocksdb2#8f75f428edd9993c3f9d9980f2b45ea1db5a73ee"
 dependencies = [
  "libc 0.2.151",
  "librocksdb_sys",
