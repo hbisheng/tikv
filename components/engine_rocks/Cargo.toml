@@ -59,7 +59,7 @@ txn_types = { workspace = true }
 
 [dependencies.rocksdb]
 git = "https://github.com/hbisheng/rust-rocksdb.git"
-branch = "upgrade-rocksdb"
+branch = "upgrade-rocksdb2"
 package = "rocksdb"
 features = ["encryption"]
 
