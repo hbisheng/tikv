@@ -59,7 +59,7 @@ txn_types = { workspace = true }
 
 [dependencies.rocksdb]
 git = "https://github.com/hbisheng/rust-rocksdb.git"
-branch = "revert-snapshot-release"
+branch = "compression-zstd"
 package = "rocksdb"
 features = ["encryption"]
 

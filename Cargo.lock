@@ -2913,7 +2913,7 @@ dependencies = [
 [[package]]
 name = "librocksdb_sys"
 version = "0.1.0"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=revert-snapshot-release#209fbb3e2ed81cc193f8dae47500918635afae3d"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=compression-zstd#d267a62f453faffeb0f451b481af79585dd38f1a"
 dependencies = [
  "bindgen 0.65.1",
  "bzip2-sys",
@@ -2932,7 +2932,7 @@ dependencies = [
 [[package]]
 name = "libtitan_sys"
 version = "0.0.1"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=revert-snapshot-release#209fbb3e2ed81cc193f8dae47500918635afae3d"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=compression-zstd#d267a62f453faffeb0f451b481af79585dd38f1a"
 dependencies = [
  "bzip2-sys",
  "cc",
@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "rocksdb"
 version = "0.3.0"
-source = "git+https://github.com/hbisheng/rust-rocksdb?branch=revert-snapshot-release#209fbb3e2ed81cc193f8dae47500918635afae3d"
+source = "git+https://github.com/hbisheng/rust-rocksdb?branch=compression-zstd#d267a62f453faffeb0f451b481af79585dd38f1a"
 dependencies = [
  "libc 0.2.151",
  "librocksdb_sys",
