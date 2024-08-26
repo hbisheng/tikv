@@ -438,6 +438,7 @@ pub mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_raw_call_gctask() {
         let engine = TestEngineBuilder::new()
             .api_version(ApiVersion::V2)

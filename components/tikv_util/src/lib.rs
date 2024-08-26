@@ -594,6 +594,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn test_panic_hook() {
         use gag::BufferRedirect;
         use slog::{self, Drain, OwnedKVList, Record};

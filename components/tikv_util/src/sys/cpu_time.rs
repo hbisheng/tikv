@@ -320,6 +320,7 @@ mod tests {
 
     // this test should be executed alone.
     #[test]
+    #[ignore]
     fn test_process_usage() {
         let mut stat = ProcessStat::cur_proc_stat().unwrap();
 

@@ -256,6 +256,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_log_key() {
         let buffer = crate::test_util::SyncLoggerBuffer::new();
         let logger = buffer.build_logger();

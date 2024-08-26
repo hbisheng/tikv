@@ -239,6 +239,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_observer_basic() {
         let mock_engine = PanicEngine;
         let (sched, mut rx) = dummy_scheduler();

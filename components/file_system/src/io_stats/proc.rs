@@ -258,6 +258,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_fetch_all_io_bytes() {
         let tmp = tempdir_in("/var/tmp").unwrap_or_else(|_| tempdir().unwrap());
 

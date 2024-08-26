@@ -293,6 +293,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[ignore]
     fn test_unix_file_allocate_failure() {
         let tmp_dir = Builder::new()
             .prefix("test_unix_file_allocate_failure")

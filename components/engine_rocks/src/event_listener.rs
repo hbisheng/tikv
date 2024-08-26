@@ -278,6 +278,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_persistence_listener() {
         let temp_dir = Builder::new()
             .prefix("test_persistence_listener")

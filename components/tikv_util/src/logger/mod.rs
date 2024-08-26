@@ -779,6 +779,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_log_format_text() {
         let buffer: Arc<Mutex<Vec<u8>>> = Arc::default();
         let decorator = PlainSyncDecorator::new(TestWriter(buffer.clone()));

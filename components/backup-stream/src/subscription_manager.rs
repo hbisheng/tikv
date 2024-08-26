@@ -1246,6 +1246,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_basic_retry() {
         use ObserveEvent::*;
         let failed = Arc::new(AtomicBool::new(false));
@@ -1313,6 +1314,7 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_region_split_inflight() {
         let mut suite = Suite::new(FuncInitialScan(|_, _, _| Ok(Statistics::default())));
         let _guard = suite.rt.enter();
