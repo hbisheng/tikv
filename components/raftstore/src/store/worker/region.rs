@@ -493,6 +493,7 @@ where
             "region_id" => region_id,
             "time_takes" => ?timer.saturating_elapsed(),
         );
+        println!("[region={}][peer={}] apply new data", region_id, peer_id);
         Ok(())
     }
 

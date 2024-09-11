@@ -2544,6 +2544,7 @@ where
                             new_split_peer.result =
                                 Some(format!("status {:?} is not expected", v.get()));
                         } else {
+                            println!("apply.rs: replace region {}", *region_id);
                             replace_regions.insert(*region_id);
                             v.insert((new_split_peer.peer_id, true));
                         }
@@ -3737,6 +3738,7 @@ where
     fn handle_destroy(&mut self, ctx: &mut ApplyContext<EK>, d: Destroy) {
         fail_point!("on_apply_handle_destroy");
         assert_eq!(d.region_id, self.delegate.region_id());
+        println!("handle_destroy() -> region_id={}, peer_id={}", self.delegate.region_id(), self.delegate.id());
         if d.merge_from_snapshot {
             assert_eq!(self.delegate.stopped, false);
         }

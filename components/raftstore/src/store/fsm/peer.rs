@@ -259,7 +259,7 @@ where
             }
             Some(peer) => peer.clone(),
         };
-
+        println!("[region={}][peer={}] create peer", region.get_id(), meta_peer.get_id());
         info!(
             "create peer";
             "region_id" => region.get_id(),
@@ -320,6 +320,8 @@ where
             "create_by_peer_id" => create_by_peer.get_id(),
             "create_by_peer_store_id" => create_by_peer.get_store_id(),
         );
+        println!("[region={}][peer={}][store={}] replicate peer, create_by_peer_id:{}, create_by_peer_store_id:{}", 
+            region_id, peer.get_id(),store_id, create_by_peer.get_id(), create_by_peer.get_store_id());
 
         let mut region = metapb::Region::default();
         region.set_id(region_id);
@@ -3961,7 +3963,7 @@ where
         fail_point!("on_split", self.ctx.store_id() == 3, |_| {});
 
         let region_id = derived.get_id();
-
+        println!("[region={}][store={}] on_ready_split_region is called", region_id, self.ctx.store_id());
         // Group in-memory pessimistic locks in the original region into new regions.
         // The locks of new regions will be put into the corresponding new regions
         // later. And the locks belonging to the old region will stay in the original
@@ -4033,9 +4035,10 @@ where
             panic!("{} original region should exist", self.fsm.peer.tag);
         }
         let last_region_id = regions.last().unwrap().get_id();
+        println!("inside on_ready_split_region: new_split_regions: {:?}", new_split_regions);
         for (new_region, locks) in regions.into_iter().zip(region_locks) {
             let new_region_id = new_region.get_id();
-
+            println!("inside on_ready_split_region: new_region_id={}, region_id={}", new_region_id, region_id);
             if new_region_id == region_id {
                 let not_exist = meta
                     .region_ranges
@@ -4090,6 +4093,10 @@ where
                 self.ctx.router.close(new_region_id);
                 is_uninitialized_peer_exist = true;
             }
+            
+            println!("[region={}][store={}] insert new region, is_uninitialized_peer_exist:{}, region:{:?}", 
+                new_region_id, self_store_id, is_uninitialized_peer_exist, new_region);
+
             info!(
                 "insert new region";
                 "region_id" => new_region_id,

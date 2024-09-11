@@ -9,8 +9,6 @@ use std::{
     time::Duration,
 };
 
-pub use crate::logging::*;
-
 use collections::HashMap;
 use engine_traits::CF_WRITE;
 use grpcio::{ChannelBuilder, Environment};
@@ -35,7 +33,6 @@ use tikv_util::{
     config::{ReadableDuration, ReadableSize},
     HandyRwLock,
 };
-use test_util::logging::init_log_for_test;
 use txn_types::{Key, PessimisticLock, TimeStamp};
 
 #[test]
@@ -501,6 +498,7 @@ fn test_split_not_to_split_existing_tombstone_region() {
 
     assert_eq!(r1, 1);
     let before_check_snapshot_1_2_fp = "before_check_snapshot_1_2";
+    println!("about to pause before_check_snapshot_1_2");
     fail::cfg(before_check_snapshot_1_2_fp, "pause").unwrap();
     pd_client.must_add_peer(r1, new_peer(2, 2));
 
@@ -511,7 +509,7 @@ fn test_split_not_to_split_existing_tombstone_region() {
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
 
-    must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
+    must_get_equal(&cluster.get_engine(2), b"k1", b"v1"); // ？？没有 apply snapshot 怎么会有 k1？因为是通过 split 后的新 region replicate 来的。
 
     let left = pd_client.get_region(b"k1").unwrap();
     let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
@@ -519,8 +517,11 @@ fn test_split_not_to_split_existing_tombstone_region() {
     must_get_none(&cluster.get_engine(2), b"k1");
 
     let on_handle_apply_2_fp = "on_handle_apply_2";
+
+    println!("about to pause on_handle_apply_2");
     fail::cfg("on_handle_apply_2", "pause").unwrap();
 
+    println!("about to remove before_check_snapshot_1_2");
     fail::remove(before_check_snapshot_1_2_fp);
 
     // Wait for the logs
@@ -532,6 +533,7 @@ fn test_split_not_to_split_existing_tombstone_region() {
     let peer_check_stale_state_fp = "peer_check_stale_state";
     fail::cfg(peer_check_stale_state_fp, "return()").unwrap();
 
+    println!("about to remove on_handle_apply_2");
     fail::remove(on_handle_apply_2_fp);
 
     // If value of `k22` is equal to `v22`, the previous split log must be applied.
@@ -639,7 +641,6 @@ fn test_split_continue_when_destroy_peer_after_mem_check() {
 // with the same peer id has been created on this store.
 #[test]
 fn test_split_should_split_existing_same_uninitialied_peer() {
-    logging::init_log_for_test();
     let mut cluster = new_node_cluster(0, 3);
     configure_for_merge(&mut cluster);
     cluster.cfg.raft_store.right_derive_when_split = true;
@@ -664,7 +665,7 @@ fn test_split_should_split_existing_same_uninitialied_peer() {
     // ***** 这个是把哪里给 pause 了？ region_id = 1, store_id = 2. 
 
     pd_client.must_add_peer(r1, new_peer(2, 2));
-    // ***** 这个 peer 的 snapshot 应该会卡住。因为 store_id 是 2.
+    // ***** store_id=2, peer_id=2 的 peer 创建了，但是被卡住。
 
     cluster.must_put(b"k1", b"v1");
     cluster.must_put(b"k2", b"v2");
@@ -682,15 +683,23 @@ fn test_split_should_split_existing_same_uninitialied_peer() {
 
     // Wait for region 1000 sending heartbeat and snapshot to store 2
     sleep_ms(200);
-
+    println!("removing before_check_snapshot_1_2_fp. Unleashing the split.");
     fail::remove(before_check_snapshot_1_2_fp);
     // peer 2 applied snapshot
     must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
 
+    println!("let's remove the peer right after the split");
+    let left_peer_2 = find_peer(&region, 2).cloned().unwrap();
+    pd_client.must_remove_peer(1000, left_peer_2);
+
+    sleep_ms(5000);
+
+    println!("removing before_check_snapshot_1000_2_fp. Ignore snapshot? ");
     fail::remove(before_check_snapshot_1000_2_fp);
 
     must_get_equal(&cluster.get_engine(2), b"k11", b"v11");
-    assert_eq!(999, 1000);
+
+    sleep_ms(5000);
 }
 
 // Test if a peer can be created from splitting when another uninitialied peer

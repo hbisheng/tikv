@@ -1470,6 +1470,8 @@ where
         let t = TiInstant::now();
 
         let mut region = self.region().clone();
+        
+        println!("[region={}][peer={}] begin to destroy", self.region_id, self.peer.get_id());
         info!(
             "begin to destroy";
             "region_id" => self.region_id,

@@ -267,6 +267,7 @@ impl RecvSnapContext {
                 return Err(e);
             }
         }
+        println!("sending raft message {:?}", self.raft_msg);
         raft_router.feed(self.raft_msg, true);
         info!("saving all snapshot files"; "snap_key" => %key, "takes" => ?self.start.saturating_elapsed());
         Ok(())

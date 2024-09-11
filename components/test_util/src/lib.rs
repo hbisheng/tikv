@@ -8,7 +8,7 @@ extern crate slog_global;
 
 pub mod encryption;
 mod kv_generator;
-mod logging;
+pub mod logging;
 mod macros;
 mod runner;
 mod security;
