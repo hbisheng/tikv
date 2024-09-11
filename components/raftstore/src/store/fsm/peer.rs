@@ -4089,7 +4089,6 @@ where
                 }
                 self.ctx.router.close(new_region_id);
                 is_uninitialized_peer_exist = true;
-                panic!("intentional panic!!!!!!");
             }
             info!(
                 "insert new region";

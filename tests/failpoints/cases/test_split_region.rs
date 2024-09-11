@@ -657,14 +657,17 @@ fn test_split_should_split_existing_same_uninitialied_peer() {
 
     let before_check_snapshot_1_2_fp = "before_check_snapshot_1_2";
     fail::cfg(before_check_snapshot_1_2_fp, "pause").unwrap();
+    // ***** 这个是把哪里给 pause 了？ region_id = 1, store_id = 2. 
 
     pd_client.must_add_peer(r1, new_peer(2, 2));
+    // ***** 这个 peer 的 snapshot 应该会卡住。因为 store_id 是 2.
 
     cluster.must_put(b"k1", b"v1");
     cluster.must_put(b"k2", b"v2");
 
     let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
     fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
+    // ***** 这个是 region 1000, store 2
 
     let region = pd_client.get_region(b"k1").unwrap();
     cluster.must_split(&region, b"k2");
@@ -683,6 +686,7 @@ fn test_split_should_split_existing_same_uninitialied_peer() {
     fail::remove(before_check_snapshot_1000_2_fp);
 
     must_get_equal(&cluster.get_engine(2), b"k11", b"v11");
+    assert_eq!(999, 1000);
 }
 
 // Test if a peer can be created from splitting when another uninitialied peer
