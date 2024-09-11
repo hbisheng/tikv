@@ -497,6 +497,7 @@ fn test_split_not_to_split_existing_tombstone_region() {
     pd_client.must_add_peer(r1, new_peer(3, 3));
 
     assert_eq!(r1, 1);
+    // Pause snapshots. Peers can be created but they can't apply data.
     let before_check_snapshot_1_2_fp = "before_check_snapshot_1_2";
     println!("about to pause before_check_snapshot_1_2");
     fail::cfg(before_check_snapshot_1_2_fp, "pause").unwrap();
@@ -512,57 +513,31 @@ fn test_split_not_to_split_existing_tombstone_region() {
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
 
-    // must_get_equal(&cluster.get_engine(2), b"k1", b"v1"); // ？？没有 apply snapshot 怎么会有 k1？因为是通过 split 后的新 region replicate 来的。
-    must_get_none(&cluster.get_engine(2), b"k1"); // ？？没有 apply snapshot 怎么会有 k1？因为是通过 split 后的新 region replicate 来的。
+    must_get_none(&cluster.get_engine(2), b"k1"); 
 
-    // ******* 两个都卡住，两个都通过 replicate peer 创建了节点
-
-    // ******* 此时把 split 给 unleash，应该会创造新的节点。
-    println!("about to remove before_check_snapshot_1_2");
+    // Unblock peer 2. Split will proceed and replace the existing peer 1003. ******* 此时把 split 给 unleash，应该会创造新的节点。
+    // println!("about to remove before_check_snapshot_1_2");
     fail::remove(before_check_snapshot_1_2_fp);
 
-    // ******* 甚至数据都应该可以访问。
+    // Data can be accessed from Peer 1003 ******* 甚至数据都应该可以访问。
     must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
 
-    // ******* 马上删除，希望触发 destroy region
+    // Immediately remove peer 1003 ******* 马上删除，希望触发 destroy region
     let left = pd_client.get_region(b"k1").unwrap();
     let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
     pd_client.must_remove_peer(left.get_id(), left_peer_2);
     must_get_none(&cluster.get_engine(2), b"k1");
 
-
     // Wait for the logs
-    sleep_ms(5000);
+    sleep_ms(500);
 
     // 释放第一个，应该 panic
     println!("about to remove before_check_snapshot_1000_2");
     fail::remove(before_check_snapshot_1000_2_fp);
 
     // Wait for the logs
-    sleep_ms(5000);
-
-    /*
-    // If left_peer_2 can be created, dropping all msg to make it exist.
-    cluster.add_send_filter(IsolationFilterFactory::new(2));
-    // Also don't send check stale msg to PD
-    let peer_check_stale_state_fp = "peer_check_stale_state";
-    fail::cfg(peer_check_stale_state_fp, "return()").unwrap();
-
-    println!("about to remove on_handle_apply_2");
-    fail::remove(on_handle_apply_2_fp);
-
-    // If value of `k22` is equal to `v22`, the previous split log must be applied.
-    must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
-
-    // If left_peer_2 is created, `must_get_none` will fail.
+    sleep_ms(500);
     must_get_none(&cluster.get_engine(2), b"k1");
-
-    cluster.clear_send_filters();
-
-    pd_client.must_add_peer(left.get_id(), new_peer(2, 4));
-
-    must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
-     */
 }
 
 // TiKV uses memory lock to control the order between spliting and creating
