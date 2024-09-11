@@ -9,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+pub use crate::logging::*;
+
 use collections::HashMap;
 use engine_traits::CF_WRITE;
 use grpcio::{ChannelBuilder, Environment};
@@ -33,6 +35,7 @@ use tikv_util::{
     config::{ReadableDuration, ReadableSize},
     HandyRwLock,
 };
+use test_util::logging::init_log_for_test;
 use txn_types::{Key, PessimisticLock, TimeStamp};
 
 #[test]
@@ -636,6 +639,7 @@ fn test_split_continue_when_destroy_peer_after_mem_check() {
 // with the same peer id has been created on this store.
 #[test]
 fn test_split_should_split_existing_same_uninitialied_peer() {
+    logging::init_log_for_test();
     let mut cluster = new_node_cluster(0, 3);
     configure_for_merge(&mut cluster);
     cluster.cfg.raft_store.right_derive_when_split = true;
