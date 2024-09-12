@@ -3102,7 +3102,13 @@ where
         }
 
         let mut meta = self.ctx.store_meta.lock().unwrap();
-        if meta.regions[&self.region_id()] != *self.region() {
+        let region_mismatch = match meta.regions.get(&self.region_id()) {
+            Some(region) => *region != *self.region(),
+            None => true, 
+            // If the region doesn't exist, treat it as a mismatch. 
+            // This can happen in a rare race condition. 
+        };
+        if region_mismatch {
             if !self.fsm.peer.is_initialized() {
                 println!("[region={}][peer={}]stale delegate detected, skip", self.fsm.region_id(), self.fsm.peer_id());
                 info!(
