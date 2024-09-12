@@ -532,7 +532,7 @@ fn test_split_not_to_split_existing_tombstone_region() {
     sleep_ms(500);
 
     // 释放第一个，应该 panic
-    println!("about to remove before_check_snapshot_1000_2");
+    // println!("about to remove before_check_snapshot_1000_2");
     fail::remove(before_check_snapshot_1000_2_fp);
 
     // Wait for the logs
