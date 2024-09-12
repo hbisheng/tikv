@@ -3104,6 +3104,7 @@ where
         let mut meta = self.ctx.store_meta.lock().unwrap();
         if meta.regions[&self.region_id()] != *self.region() {
             if !self.fsm.peer.is_initialized() {
+                println!("[region={}][peer={}]stale delegate detected, skip", self.fsm.region_id(), self.fsm.peer_id());
                 info!(
                     "stale delegate detected, skip";
                     "region_id" => self.fsm.region_id(),

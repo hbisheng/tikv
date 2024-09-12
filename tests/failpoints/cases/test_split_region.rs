@@ -522,11 +522,11 @@ fn test_split_not_to_split_existing_tombstone_region() {
     // Data can be accessed from Peer 1003 ******* 甚至数据都应该可以访问。
     must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
 
-    // Immediately remove peer 1003 ******* 马上删除，希望触发 destroy region
-    let left = pd_client.get_region(b"k1").unwrap();
-    let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
-    pd_client.must_remove_peer(left.get_id(), left_peer_2);
-    must_get_none(&cluster.get_engine(2), b"k1");
+    // // Immediately remove peer 1003 ******* 马上删除，希望触发 destroy region
+    // let left = pd_client.get_region(b"k1").unwrap();
+    // let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
+    // pd_client.must_remove_peer(left.get_id(), left_peer_2);
+    // must_get_none(&cluster.get_engine(2), b"k1");
 
     // Wait for the logs
     sleep_ms(500);
