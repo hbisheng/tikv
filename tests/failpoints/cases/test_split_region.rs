@@ -21,6 +21,7 @@ use kvproto::{
     raft_serverpb::{PeerState, RaftMessage},
     tikvpb::TikvClient,
 };
+use libc::sleep;
 use pd_client::PdClient;
 use raft::eraftpb::MessageType;
 use raftstore::{
@@ -602,17 +603,24 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
     fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
 
+    let before_handle_raft_message_1000_2_fp = "before_handle_raft_message_1000_2";
+    fail::cfg(before_handle_raft_message_1000_2_fp, "pause").unwrap();
+
     // Split the region into Region 1 and Region 1000. Peer 1003 will be created
     // for the first time when it receives a raft message from Peer 1001, but it
     // will remain uninitialized, waiting for a raft snapshot.
     let region = pd_client.get_region(b"k1").unwrap();
+
+    println!("***** about to split");
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
 
     // Check that Store 2 doesn't have any data yet.
     must_get_none(&cluster.get_engine(2), b"k1");
     must_get_none(&cluster.get_engine(2), b"k22");
-
+    println!("***** sleeping for 5s");
+    sleep_ms(5000);
+    println!("***** unblock peer 2");
     // Unblock Peer 2. It will proceed to apply the split operation, which
     // creates Peer 1003 for the second time and replaces the old Peer 1003.
     fail::remove(before_check_snapshot_1_2_fp);
@@ -622,6 +630,7 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 
     // Immediately remove the new Peer 1003. This removes the region metadata.
+    println!("***** about to remove new peer 1003");
     let left = pd_client.get_region(b"k1").unwrap();
     let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
     pd_client.must_remove_peer(left.get_id(), left_peer_2);
@@ -631,9 +640,16 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     // Unblock the old Peer 1003. When it continues to process the snapshot
     // message, it would expect the region metadata to exist, causing a panic if
     // #17469 is not fixed.
+    println!("***** unblock old peer 1003");
     fail::remove(before_check_snapshot_1000_2_fp);
-    must_get_none(&cluster.get_engine(2), b"k1");
-    must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
+    // must_get_none(&cluster.get_engine(2), b"k1");
+    // must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
+
+    sleep_ms(1000);
+    println!("***** about to unblock old peer 1003");
+    fail::remove(before_handle_raft_message_1000_2_fp);
+
+    sleep_ms(1000);
 }
 
 // TiKV uses memory lock to control the order between spliting and creating

@@ -271,7 +271,11 @@ where
             }
             Some(peer) => peer.clone(),
         };
-
+        println!(
+            "[region={}][peer={}] create peer",
+            region.get_id(),
+            meta_peer.get_id()
+        );
         info!(
             "create peer";
             "region_id" => region.get_id(),
@@ -332,6 +336,14 @@ where
             "store_id" => store_id,
             "create_by_peer_id" => create_by_peer.get_id(),
             "create_by_peer_store_id" => create_by_peer.get_store_id(),
+        );
+        println!(
+            "[region={}][peer={}][store={}] replicate peer, create_by_peer_id:{}, create_by_peer_store_id:{}",
+            region_id,
+            peer.get_id(),
+            store_id,
+            create_by_peer.get_id(),
+            create_by_peer.get_store_id()
         );
 
         let mut region = metapb::Region::default();
@@ -648,6 +660,7 @@ where
                         continue;
                     }
 
+                    let msg_type = msg.msg.get_message().get_msg_type();
                     if let Err(e) = self.on_raft_message(msg) {
                         error!(%e;
                             "handle raft message err";
@@ -655,6 +668,13 @@ where
                             "peer_id" => self.fsm.peer_id(),
                         );
                     }
+                    println!(
+                        "[store={}][peer={}] finish handling {:?}, initialized: {}",
+                        self.store_id(),
+                        self.fsm.peer_id(),
+                        msg_type,
+                        self.fsm.peer.is_initialized(),
+                    );
                 }
                 PeerMsg::RaftCommand(cmd) => {
                     let propose_time = cmd.send_time.saturating_elapsed();
@@ -2635,6 +2655,26 @@ where
         });
 
         let is_initialized_peer = self.fsm.peer.is_initialized();
+        println!(
+            "[store={}][peer={} -> peer={}] handle raft message, type: {}, is_initialized_peer: {}",
+            self.store_id(),
+            msg.get_from_peer().get_id(),
+            self.fsm.peer_id(),
+            util::MsgType(&msg),
+            is_initialized_peer,
+        );
+
+        let msg_type = msg.get_message().get_msg_type();
+
+        fail_point!(
+            "before_handle_raft_message_1000_2",
+            self.fsm.region_id() == 1000
+                && self.store_id() == 2
+                && !is_initialized_peer
+                && MessageType::MsgAppend == msg_type,
+            |_| Ok(())
+        );
+
         debug!(
             "handle raft message";
             "region_id" => self.region_id(),
@@ -2651,7 +2691,6 @@ where
 
         self.handle_reported_disk_usage(&msg);
 
-        let msg_type = msg.get_message().get_msg_type();
         if matches!(self.ctx.self_disk_usage, DiskUsage::AlreadyFull)
             && MessageType::MsgTimeoutNow == msg_type
         {
@@ -3415,9 +3454,11 @@ where
             false
         };
         if before_check_snapshot_1_2_fp() || before_check_snapshot_1000_2_fp() {
+            println!("***** [peer={}] failpoint return", self.fsm.peer_id());
             return Ok(Either::Left(key));
         }
 
+        println!("***** [peer={}] past failpoint", self.fsm.peer_id());
         if snap_region
             .get_peers()
             .iter()
