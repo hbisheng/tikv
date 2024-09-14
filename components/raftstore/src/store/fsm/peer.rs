@@ -2666,14 +2666,69 @@ where
 
         let msg_type = msg.get_message().get_msg_type();
 
-        fail_point!(
-            "before_handle_raft_message_1000_2",
+        let fp_enable = |target_msg_type: MessageType| -> bool {
             self.fsm.region_id() == 1000
                 && self.store_id() == 2
                 && !is_initialized_peer
-                && MessageType::MsgAppend == msg_type,
+                && msg_type == target_msg_type
+        };
+        fail_point!(
+            "on_snap_msg_1000_2",
+            fp_enable(MessageType::MsgSnapshot),
             |_| Ok(())
         );
+        fail_point!(
+            "on_vote_msg_1000_2",
+            fp_enable(MessageType::MsgRequestVote),
+            |_| Ok(())
+        );
+        fail_point!(
+            "on_append_msg_1000_2",
+            fp_enable(MessageType::MsgAppend),
+            |_| Ok(())
+        );
+        fail_point!(
+            "on_heartbeat_msg_1000_2",
+            fp_enable(MessageType::MsgHeartbeat),
+            |_| Ok(())
+        );
+
+        // fail_point!("before_handle_snap_msg", fp_enable(MessageType::MsgSnapshot),
+        // |_| Ok(())); fail_point!(
+        //     "before_handle_snap_message_1000_2",
+        //     self.fsm.region_id() == 1000
+        //         && self.store_id() == 2
+        //         && !is_initialized_peer
+        //         && MessageType::MsgSnapshot == msg_type,
+        //     |_| Ok(())
+        // );
+
+        // fail_point!(
+        //     "before_handle_vote_message_1000_2",
+        //     self.fsm.region_id() == 1000
+        //         && self.store_id() == 2
+        //         && !is_initialized_peer
+        //         && MessageType::MsgRequestVote == msg_type,
+        //     |_| Ok(())
+        // );
+
+        // fail_point!(
+        //     "before_handle_append_message_1000_2",
+        //     self.fsm.region_id() == 1000
+        //         && self.store_id() == 2
+        //         && !is_initialized_peer
+        //         && MessageType::MsgAppend == msg_type,
+        //     |_| Ok(())
+        // );
+
+        // fail_point!(
+        //     "before_handle_heartbeat_message_1000_2",
+        //     self.fsm.region_id() == 1000
+        //         && self.store_id() == 2
+        //         && !is_initialized_peer
+        //         && MessageType::MsgHeartbeat == msg_type,
+        //     |_| Ok(())
+        // );
 
         debug!(
             "handle raft message";

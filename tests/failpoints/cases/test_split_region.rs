@@ -555,6 +555,14 @@ fn test_split_not_to_split_existing_tombstone_region() {
 
 #[test]
 fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
+    test_stale_peer_handle_msg("on_snap_msg_1000_2");
+    test_stale_peer_handle_msg("on_vote_msg_1000_2");
+    test_stale_peer_handle_msg("on_append_msg_1000_2");
+    test_stale_peer_handle_msg("on_heartbeat_msg_1000_2");
+    // test_stale_peer_handle_msg("before_handle_append_message_1000_2");
+}
+
+fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
     // The following diagram represents the final state of the test:
     //
     //                    ┌───────────┐  ┌───────────┐  ┌───────────┐
@@ -603,7 +611,8 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
     fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
 
-    let before_handle_raft_message_1000_2_fp = "before_handle_raft_message_1000_2";
+    // let before_handle_raft_message_1000_2_fp =
+    // "before_handle_raft_message_1000_2";
     fail::cfg(before_handle_raft_message_1000_2_fp, "pause").unwrap();
 
     // Split the region into Region 1 and Region 1000. Peer 1003 will be created
@@ -614,6 +623,10 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     println!("***** about to split");
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
+
+    println!("***** about to transfer leader");
+    let region_1000 = pd_client.get_region(b"k1").unwrap();
+    cluster.must_transfer_leader(region_1000.get_id(), new_peer(3, 1002));
 
     // Check that Store 2 doesn't have any data yet.
     must_get_none(&cluster.get_engine(2), b"k1");
@@ -642,8 +655,8 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     // #17469 is not fixed.
     println!("***** unblock old peer 1003");
     fail::remove(before_check_snapshot_1000_2_fp);
-    // must_get_none(&cluster.get_engine(2), b"k1");
-    // must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
+    must_get_none(&cluster.get_engine(2), b"k1");
+    must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 
     sleep_ms(1000);
     println!("***** about to unblock old peer 1003");
