@@ -554,26 +554,26 @@ fn test_split_not_to_split_existing_tombstone_region() {
 }
 
 #[test]
-fn test_stale_peer_handling_snap_msg() {
-    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_snap_msg_1000_2");
+fn test_stale_peer_handle_snap() {
+    test_stale_peer_handle_raft_msg("on_snap_msg_1000_2");
 }
 
 #[test]
-fn test_stale_peer_handling_vote_msg() {
-    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_vote_msg_1000_2");
+fn test_stale_peer_handle_vote() {
+    test_stale_peer_handle_raft_msg("on_vote_msg_1000_2");
 }
 
 #[test]
-fn test_stale_peer_handling_append_msg() {
-    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_append_msg_1000_2");
+fn test_stale_peer_handle_append() {
+    test_stale_peer_handle_raft_msg("on_append_msg_1000_2");
 }
 
 #[test]
-fn test_stale_peer_handling_heartbeat_msg() {
-    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_heartbeat_msg_1000_2");
+fn test_stale_peer_handle_heartbeat() {
+    test_stale_peer_handle_raft_msg("on_heartbeat_msg_1000_2");
 }
 
-fn test_handling_msg_after_peer_is_replaced_by_split_and_removed(before_handle_raft_message_1000_2_fp: &str) {
+fn test_stale_peer_handle_raft_msg(on_handle_raft_msg_1000_2_fp: &str) {
     // The following diagram represents the final state of the test:
     //
     //                    ┌───────────┐  ┌───────────┐  ┌───────────┐
@@ -591,7 +591,8 @@ fn test_handling_msg_after_peer_is_replaced_by_split_and_removed(before_handle_r
     // twice (by raft message and by split). The new Peer 1003 will replace the
     // old Peer 1003 and but it will be immediately removed. This test verifies
     // that TiKV would not panic if the old Peer 1003 continues to process a
-    // snapshot message.
+    // remaining raft message (which may be a snapshot/vote/heartbeat/append
+    // message).
 
     let mut cluster = new_node_cluster(0, 3);
     configure_for_merge(&mut cluster.cfg);
@@ -622,9 +623,9 @@ fn test_handling_msg_after_peer_is_replaced_by_split_and_removed(before_handle_r
     // let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
     // fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
 
-    // let before_handle_raft_message_1000_2_fp =
+    // let on_handle_raft_msg_1000_2_fp =
     // "before_handle_raft_message_1000_2";
-    fail::cfg(before_handle_raft_message_1000_2_fp, "pause").unwrap();
+    fail::cfg(on_handle_raft_msg_1000_2_fp, "pause").unwrap();
 
     // Split the region into Region 1 and Region 1000. Peer 1003 will be created
     // for the first time when it receives a raft message from Peer 1001, but it
@@ -668,10 +669,10 @@ fn test_handling_msg_after_peer_is_replaced_by_split_and_removed(before_handle_r
     // fail::remove(before_check_snapshot_1000_2_fp);
 
     println!("***** about to unblock old peer 1003");
-    fail::remove(before_handle_raft_message_1000_2_fp);
-    // Waiting for the stale peer to handle its message 
+    fail::remove(on_handle_raft_msg_1000_2_fp);
+    // Waiting for the stale peer to handle its message
     sleep_ms(300);
-    
+
     must_get_none(&cluster.get_engine(2), b"k1");
     must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 }
