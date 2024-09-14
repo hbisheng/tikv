@@ -554,14 +554,26 @@ fn test_split_not_to_split_existing_tombstone_region() {
 }
 
 #[test]
-fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
-    test_stale_peer_handle_msg("on_vote_msg_1000_2");
-    test_stale_peer_handle_msg("on_append_msg_1000_2");
-    test_stale_peer_handle_msg("on_heartbeat_msg_1000_2");
-    test_stale_peer_handle_msg("on_snap_msg_1000_2");
+fn test_stale_peer_handling_snap_msg() {
+    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_snap_msg_1000_2");
 }
 
-fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
+#[test]
+fn test_stale_peer_handling_vote_msg() {
+    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_vote_msg_1000_2");
+}
+
+#[test]
+fn test_stale_peer_handling_append_msg() {
+    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_append_msg_1000_2");
+}
+
+#[test]
+fn test_stale_peer_handling_heartbeat_msg() {
+    test_handling_msg_after_peer_is_replaced_by_split_and_removed("on_heartbeat_msg_1000_2");
+}
+
+fn test_handling_msg_after_peer_is_replaced_by_split_and_removed(before_handle_raft_message_1000_2_fp: &str) {
     // The following diagram represents the final state of the test:
     //
     //                    ┌───────────┐  ┌───────────┐  ┌───────────┐
