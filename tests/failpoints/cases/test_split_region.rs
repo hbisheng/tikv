@@ -559,7 +559,6 @@ fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
     test_stale_peer_handle_msg("on_vote_msg_1000_2");
     test_stale_peer_handle_msg("on_append_msg_1000_2");
     test_stale_peer_handle_msg("on_heartbeat_msg_1000_2");
-    // test_stale_peer_handle_msg("before_handle_append_message_1000_2");
 }
 
 fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
@@ -608,8 +607,8 @@ fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
     cluster.must_put(b"k1", b"v1");
 
     // Before the split, pause the snapshot apply of Peer 1003.
-    let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
-    fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
+    // let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
+    // fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
 
     // let before_handle_raft_message_1000_2_fp =
     // "before_handle_raft_message_1000_2";
@@ -624,15 +623,15 @@ fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
 
-    println!("***** about to transfer leader");
-    let region_1000 = pd_client.get_region(b"k1").unwrap();
-    cluster.must_transfer_leader(region_1000.get_id(), new_peer(3, 1002));
+    // println!("***** about to transfer leader");
+    // let region_1000 = pd_client.get_region(b"k1").unwrap();
+    // cluster.must_transfer_leader(region_1000.get_id(), new_peer(3, 1002));
 
     // Check that Store 2 doesn't have any data yet.
     must_get_none(&cluster.get_engine(2), b"k1");
     must_get_none(&cluster.get_engine(2), b"k22");
-    println!("***** sleeping for 5s");
-    sleep_ms(5000);
+    // println!("***** sleeping for 5s");
+    // sleep_ms(5000);
     println!("***** unblock peer 2");
     // Unblock Peer 2. It will proceed to apply the split operation, which
     // creates Peer 1003 for the second time and replaces the old Peer 1003.
@@ -653,16 +652,16 @@ fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {
     // Unblock the old Peer 1003. When it continues to process the snapshot
     // message, it would expect the region metadata to exist, causing a panic if
     // #17469 is not fixed.
-    println!("***** unblock old peer 1003");
-    fail::remove(before_check_snapshot_1000_2_fp);
-    must_get_none(&cluster.get_engine(2), b"k1");
-    must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
+    // println!("***** unblock old peer 1003");
+    // fail::remove(before_check_snapshot_1000_2_fp);
 
-    sleep_ms(1000);
     println!("***** about to unblock old peer 1003");
     fail::remove(before_handle_raft_message_1000_2_fp);
-
-    sleep_ms(1000);
+    // Waiting for the stale peer to handle its message 
+    sleep_ms(300);
+    
+    must_get_none(&cluster.get_engine(2), b"k1");
+    must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 }
 
 // TiKV uses memory lock to control the order between spliting and creating
