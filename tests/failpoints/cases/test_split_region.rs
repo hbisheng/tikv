@@ -619,33 +619,22 @@ fn test_stale_peer_handle_raft_msg(on_handle_raft_msg_1000_2_fp: &str) {
     pd_client.must_add_peer(r1, new_peer(2, 2));
     cluster.must_put(b"k1", b"v1");
 
-    // Before the split, pause the snapshot apply of Peer 1003.
-    // let before_check_snapshot_1000_2_fp = "before_check_snapshot_1000_2";
-    // fail::cfg(before_check_snapshot_1000_2_fp, "pause").unwrap();
-
-    // let on_handle_raft_msg_1000_2_fp =
-    // "before_handle_raft_message_1000_2";
+    // Before the split, pause Peer 1003 when processing a certain raft message.
+    // The message type depends on the failpoint name input.
     fail::cfg(on_handle_raft_msg_1000_2_fp, "pause").unwrap();
 
     // Split the region into Region 1 and Region 1000. Peer 1003 will be created
     // for the first time when it receives a raft message from Peer 1001, but it
-    // will remain uninitialized, waiting for a raft snapshot.
+    // will remain uninitialized because it's paused due to the failpoint above.
     let region = pd_client.get_region(b"k1").unwrap();
 
-    println!("***** about to split");
     cluster.must_split(&region, b"k2");
     cluster.must_put(b"k22", b"v22");
-
-    // println!("***** about to transfer leader");
-    // let region_1000 = pd_client.get_region(b"k1").unwrap();
-    // cluster.must_transfer_leader(region_1000.get_id(), new_peer(3, 1002));
 
     // Check that Store 2 doesn't have any data yet.
     must_get_none(&cluster.get_engine(2), b"k1");
     must_get_none(&cluster.get_engine(2), b"k22");
-    // println!("***** sleeping for 5s");
-    // sleep_ms(5000);
-    println!("***** unblock peer 2");
+
     // Unblock Peer 2. It will proceed to apply the split operation, which
     // creates Peer 1003 for the second time and replaces the old Peer 1003.
     fail::remove(before_check_snapshot_1_2_fp);
@@ -655,21 +644,17 @@ fn test_stale_peer_handle_raft_msg(on_handle_raft_msg_1000_2_fp: &str) {
     must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 
     // Immediately remove the new Peer 1003. This removes the region metadata.
-    println!("***** about to remove new peer 1003");
     let left = pd_client.get_region(b"k1").unwrap();
     let left_peer_2 = find_peer(&left, 2).cloned().unwrap();
     pd_client.must_remove_peer(left.get_id(), left_peer_2);
     must_get_none(&cluster.get_engine(2), b"k1");
     must_get_equal(&cluster.get_engine(2), b"k22", b"v22");
 
-    // Unblock the old Peer 1003. When it continues to process the snapshot
-    // message, it would expect the region metadata to exist, causing a panic if
+    // Unblock the old Peer 1003 so that it can continue to process its raft
+    // message. It would lead to a panic when it processes a snapshot message if
     // #17469 is not fixed.
-    // println!("***** unblock old peer 1003");
-    // fail::remove(before_check_snapshot_1000_2_fp);
-
-    println!("***** about to unblock old peer 1003");
     fail::remove(on_handle_raft_msg_1000_2_fp);
+
     // Waiting for the stale peer to handle its message
     sleep_ms(300);
 
