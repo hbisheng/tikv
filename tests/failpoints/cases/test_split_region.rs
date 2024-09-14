@@ -555,10 +555,10 @@ fn test_split_not_to_split_existing_tombstone_region() {
 
 #[test]
 fn test_snap_handling_after_peer_is_replaced_by_split_and_removed() {
-    test_stale_peer_handle_msg("on_snap_msg_1000_2");
     test_stale_peer_handle_msg("on_vote_msg_1000_2");
     test_stale_peer_handle_msg("on_append_msg_1000_2");
     test_stale_peer_handle_msg("on_heartbeat_msg_1000_2");
+    test_stale_peer_handle_msg("on_snap_msg_1000_2");
 }
 
 fn test_stale_peer_handle_msg(before_handle_raft_message_1000_2_fp: &str) {

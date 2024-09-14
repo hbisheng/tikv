@@ -3536,20 +3536,20 @@ where
         // peer has replaced the current peer, which can happen during a split: a
         // peer is first created via raft message, then replaced by another peer
         // (of the same region) when the split is applied.
-        let region_mismatch = match meta.regions.get(&self.region_id()) {
-            Some(region) => *region != *self.region(),
-            None => {
-                // If the region doesn't exist, treat it as a mismatch. This can
-                // happen in rare situations (e.g. #17469).
-                warn!(
-                    "region not found in meta";
-                    "region_id" => self.fsm.region_id(),
-                    "peer_id" => self.fsm.peer_id(),
-                );
-                true
-            }
-        };
-        if region_mismatch {
+        // let region_mismatch = match meta.regions.get(&self.region_id()) {
+        //     Some(region) => *region != *self.region(),
+        //     None => {
+        //         // If the region doesn't exist, treat it as a mismatch. This can
+        //         // happen in rare situations (e.g. #17469).
+        //         warn!(
+        //             "region not found in meta";
+        //             "region_id" => self.fsm.region_id(),
+        //             "peer_id" => self.fsm.peer_id(),
+        //         );
+        //         true
+        //     }
+        // };
+        if meta.regions[&self.region_id()] != *self.region() {
             if !self.fsm.peer.is_initialized() {
                 info!(
                     "stale delegate detected, skip";
