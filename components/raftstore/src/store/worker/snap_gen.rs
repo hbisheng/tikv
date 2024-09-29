@@ -19,19 +19,16 @@ use pd_client::PdClient;
 use raft::eraftpb::Snapshot as RaftSnapshot;
 use tikv_util::{
     box_try,
-    config::VersionTrack,
     error, info,
     time::{Instant, UnixSecs},
     worker::Runnable,
-    yatp_pool::{DefaultTicker, FuturePool, YatpPoolBuilder},
+    yatp_pool::FuturePool,
 };
 
 use super::metrics::*;
 use crate::store::{
-    self, snap::Result, transport::CasualRouter, CasualMessage, Config, SnapManager,
+    self, snap::Result, transport::CasualRouter, CasualMessage, SnapManager,
 };
-
-const SNAP_GENERATOR_MAX_POOL_SIZE: usize = 16;
 
 const TIFLASH: &str = "tiflash";
 const ENGINE: &str = "engine";
@@ -184,9 +181,9 @@ where
     pub fn new(
         engine: EK,
         mgr: SnapManager,
-        cfg: Arc<VersionTrack<Config>>,
         router: R,
         pd_client: Option<Arc<T>>,
+        pool: FuturePool,
     ) -> Runner<EK, R, T> {
         Runner {
             tiflash_stores: HashMap::default(),
@@ -194,19 +191,8 @@ where
             mgr,
             router,
             pd_client,
-            pool: YatpPoolBuilder::new(DefaultTicker::default())
-                .name_prefix("snap-generator")
-                .thread_count(
-                    1,
-                    cfg.value().snap_generator_pool_size,
-                    SNAP_GENERATOR_MAX_POOL_SIZE,
-                )
-                .build_future_pool(),
+            pool,
         }
-    }
-
-    pub fn snap_generator_pool(&self) -> FuturePool {
-        self.pool.clone()
     }
 }
 
