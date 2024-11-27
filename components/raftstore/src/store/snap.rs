@@ -3610,15 +3610,15 @@ pub mod tests {
         limiter.set_limit(2);
         assert!(limiter.try_recv(1));
         assert!(!limiter.try_recv(3));
-        assert!(limiter.get_used_capacity(), 2);
+        assert_eq!(limiter.get_used_capacity(), 2);
 
         limiter.finish_recv(1);
         limiter.finish_recv(2);
         // If we reserve a capacity of 1, the limiter will only allow one receive.
         limiter.set_reserved_capacity(1);
-        assert!(limiter.get_used_capacity(), 1);
+        assert_eq!(limiter.get_used_capacity(), 1);
         assert!(limiter.try_recv(1));
-        assert!(limiter.get_used_capacity(), 2);
+        assert_eq!(limiter.get_used_capacity(), 2);
         assert!(!limiter.try_recv(2));
 
         // Test the evict_expired_timestamps function.
