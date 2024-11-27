@@ -439,7 +439,6 @@ fn cleanup_after_recv(
         "receiving_count, before: {}",
         recving_count.load(Ordering::SeqCst)
     );
-    println!("used capacity, before: {}", snap_mgr.stats().recv_cap_used);
 
     recving_count.fetch_sub(1, Ordering::SeqCst);
     let id = region_id.load(Ordering::SeqCst);
@@ -453,7 +452,6 @@ fn cleanup_after_recv(
         "receiving_count, after: {}",
         recving_count.load(Ordering::SeqCst)
     );
-    println!("used capacity, after: {}", snap_mgr.stats().recv_cap_used);
 }
 
 pub struct Runner<R: RaftExtension> {

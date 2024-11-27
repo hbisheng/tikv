@@ -1223,4 +1223,3 @@ fn test_snapshot_receiver_busy_when_sink_is_slow() {
     fail::remove("before_region_gen_snap");
     fail::remove("on_recv_snap_busy");
 }
-
