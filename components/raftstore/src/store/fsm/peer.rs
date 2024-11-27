@@ -3149,7 +3149,9 @@ where
             ExtraMessageType::MsgGcPeerResponse | ExtraMessageType::MsgFlushMemtable => (),
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
             ExtraMessageType::MsgSnapGenPrecheckRequest => {
+                println!("before precheck, recv_cap_used: {}, region_id: {}", self.ctx.snap_mgr.stats().recv_cap_used, self.region_id());
                 let passed = self.ctx.snap_mgr.recv_snap_precheck(msg.region_id);
+                println!("precheck result: {}, recv_cap_used: {}", passed, self.ctx.snap_mgr.stats().recv_cap_used);
                 self.fsm.peer.send_snap_gen_precheck_response(
                     self.ctx,
                     &msg.from_peer.unwrap(),

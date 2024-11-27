@@ -435,13 +435,25 @@ fn cleanup_after_recv(
     snap_mgr: SnapManager,
     recving_count: Arc<AtomicUsize>,
 ) {
+    println!(
+        "receiving_count, before: {}",
+        recving_count.load(Ordering::SeqCst)
+    );
+    println!("used capacity, before: {}", snap_mgr.stats().recv_cap_used);
+
     recving_count.fetch_sub(1, Ordering::SeqCst);
     let id = region_id.load(Ordering::SeqCst);
+    println!("in cleanup_after_recv, region_id={}", id);
     if id != 0 {
         // Notify the snapshot manager that a snapshot has been received,
         // freeing up the associated resource in the concurrency limiter.
         snap_mgr.recv_snap_complete(id);
     }
+    println!(
+        "receiving_count, after: {}",
+        recving_count.load(Ordering::SeqCst)
+    );
+    println!("used capacity, after: {}", snap_mgr.stats().recv_cap_used);
 }
 
 pub struct Runner<R: RaftExtension> {
@@ -553,6 +565,10 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 let raft_router = self.raft_router.clone();
                 let recving_count = Arc::clone(&self.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
+                println!(
+                    "recving_count incremented to {}",
+                    self.recving_count.load(Ordering::SeqCst)
+                );
                 let task = async move {
                     let result =
                         recv_snap(stream, sink, snap_mgr, raft_router, recving_count).await;

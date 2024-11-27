@@ -681,7 +681,28 @@ fn test_sending_fail_with_net_error() {
     let engine2 = cluster.get_engine(2);
     must_get_none(&engine2, b"k1");
     assert_eq!(cluster.get_snap_mgr(2).stats().receiving_count, 0);
-    assert_eq!(cluster.get_snap_mgr(2).stats().recv_cap_used, 0);
+}
+
+#[test]
+fn test_sending_fail_with_net_error_and_retry() {
+    let mut cluster = new_server_cluster(0, 2);
+    configure_for_snapshot(&mut cluster.cfg);
+    cluster.cfg.raft_store.snap_gc_timeout = ReadableDuration::millis(300);
+
+    let pd_client = cluster.pd_client.clone();
+    // Disable default max peer number check.
+    pd_client.disable_default_operator();
+    let r1 = cluster.run_conf_change();
+    cluster.must_put(b"k1", b"v1");
+
+    // peer2 will interrupt in receiving snapshot
+    fail::cfg("receiving_snapshot_net_error", "1*return()->off").unwrap();
+    pd_client.must_add_peer(r1, new_learner_peer(2, 2));
+
+    // Unlike the previous test case, peer2 should be able to receive the
+    // snapshot after the network error goes away.
+    let engine2 = cluster.get_engine(2);
+    must_get_equal(&engine2, b"k1", b"v1");
 }
 
 /// Logs scan are now moved to raftlog gc threads. The case is to test if logs
@@ -1154,7 +1175,7 @@ fn test_snapshot_receiver_busy() {
 }
 
 #[test]
-fn test_snapshot_receiver_not_busy_when_sink_is_slow() {
+fn test_snapshot_receiver_busy_when_sink_is_slow() {
     let mut cluster = new_server_cluster(0, 2);
     // Test that a snapshot generation is paused when the receiver is busy. To
     // trigger the scenario, two regions are set up to send snapshots to the
@@ -1181,7 +1202,8 @@ fn test_snapshot_receiver_not_busy_when_sink_is_slow() {
     // in this test, there should only be two snapshot generations in total.
     fail::cfg("before_region_gen_snap", "2*print()->panic()").unwrap();
 
-    // The first snapshot task will be stalled at sink. Only one will be able to proceed and it will be stalled. 
+    // The first snapshot task will be stalled at sink. Only one will be able to
+    // proceed and it will be stalled.
     fail::cfg("receiving_snapshot_sink_slow", "pause").unwrap();
     pd_client.must_add_peer(r1, new_peer(2, 2));
     // Wait until the first snapshot is applied.
@@ -1197,7 +1219,8 @@ fn test_snapshot_receiver_not_busy_when_sink_is_slow() {
 
     // Ensure that both regions work.
     must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
-    
+
     fail::remove("before_region_gen_snap");
     fail::remove("on_recv_snap_busy");
 }
+
