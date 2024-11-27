@@ -3150,6 +3150,7 @@ where
             ExtraMessageType::MsgRefreshBuckets => self.on_msg_refresh_buckets(msg),
             ExtraMessageType::MsgSnapGenPrecheckRequest => {
                 let passed = self.ctx.snap_mgr.recv_snap_precheck(msg.region_id);
+                println!("precheck result: {}, region_id: {}", passed, self.region_id());
                 self.fsm.peer.send_snap_gen_precheck_response(
                     self.ctx,
                     &msg.from_peer.unwrap(),

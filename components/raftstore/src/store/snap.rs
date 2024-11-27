@@ -1910,12 +1910,14 @@ impl SnapManager {
     /// receive a new snapshot. If the precheck is successful, the leader will
     /// proceed to generate and send the snapshot.
     pub fn recv_snap_precheck(&self, region_id: u64) -> bool {
+        println!("recv_snap_precheck: region_id {}", region_id);
         self.core.recv_concurrency_limiter.try_recv(region_id)
     }
 
     /// recv_snap_complete is part of the snapshot recv precheck process, and
     /// should be called when a follower finishes receiving a snapshot.
     pub fn recv_snap_complete(&self, region_id: u64) {
+        println!("recv_snap_complete: region_id {}", region_id);
         self.core.recv_concurrency_limiter.finish_recv(region_id)
     }
 

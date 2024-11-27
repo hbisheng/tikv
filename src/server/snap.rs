@@ -410,7 +410,10 @@ fn recv_snap<R: RaftExtension + 'static>(
     };
     async move {
         match recv_task.await {
-            Ok(()) => sink.success(Done::default()).await.map_err(Error::from),
+            Ok(()) => {
+                fail_point!("receiving_snapshot_sink_slow");
+                sink.success(Done::default()).await.map_err(Error::from)
+            }
             Err(e) => {
                 let status = RpcStatus::with_message(RpcStatusCode::UNKNOWN, format!("{:?}", e));
                 sink.fail(status).await.map_err(Error::from)
@@ -527,9 +530,11 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 let raft_router = self.raft_router.clone();
                 let recving_count = Arc::clone(&self.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
+                println!("recving_count incremented to {}", recving_count.load(Ordering::SeqCst));
                 let task = async move {
                     let result = recv_snap(stream, sink, snap_mgr, raft_router).await;
                     recving_count.fetch_sub(1, Ordering::SeqCst);
+                    println!("recving_count decremented to {}", recving_count.load(Ordering::SeqCst));
                     if let Err(e) = result {
                         error!("failed to recv snapshot"; "err" => %e);
                     }

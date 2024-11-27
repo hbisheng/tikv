@@ -688,6 +688,7 @@ fn test_sending_fail_with_net_error_and_retry() {
     let mut cluster = new_server_cluster(0, 2);
     configure_for_snapshot(&mut cluster.cfg);
     cluster.cfg.raft_store.snap_gc_timeout = ReadableDuration::millis(300);
+    cluster.cfg.server.concurrent_recv_snap_limit = 1;
 
     let pd_client = cluster.pd_client.clone();
     // Disable default max peer number check.
