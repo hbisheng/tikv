@@ -1443,6 +1443,7 @@ pub enum SnapEntry {
 pub struct SnapStats {
     pub sending_count: usize,
     pub receiving_count: usize,
+    pub recv_cap_used: usize,
     pub stats: Vec<SnapshotStat>,
 }
 
@@ -1886,6 +1887,7 @@ impl SnapManager {
         SnapStats {
             sending_count: sending_cnt,
             receiving_count: receiving_cnt,
+            recv_cap_used: self.core.recv_concurrency_limiter.get_used_capacity(),
             stats,
         }
     }
@@ -2125,6 +2127,12 @@ impl SnapRecvConcurrencyLimiter {
     pub fn set_reserved_capacity(&self, reserved_cap: usize) {
         self.reserved_capacity
             .store(reserved_cap, Ordering::Relaxed);
+    }
+
+    fn get_used_capacity(&self) -> usize {
+        let timestamps = self.timestamps.lock().unwrap();
+        let reserved_capacity = self.reserved_capacity.load(Ordering::Relaxed);
+        timestamps.len() + reserved_capacity
     }
 }
 
@@ -2370,6 +2378,7 @@ impl TabletSnapManager {
         SnapStats {
             sending_count: self.sending_count.load(Ordering::SeqCst),
             receiving_count: self.recving_count.load(Ordering::SeqCst),
+            recv_cap_used: 0,
             stats,
         }
     }
@@ -3601,12 +3610,15 @@ pub mod tests {
         limiter.set_limit(2);
         assert!(limiter.try_recv(1));
         assert!(!limiter.try_recv(3));
+        assert!(limiter.get_used_capacity(), 2);
 
         limiter.finish_recv(1);
         limiter.finish_recv(2);
         // If we reserve a capacity of 1, the limiter will only allow one receive.
         limiter.set_reserved_capacity(1);
+        assert!(limiter.get_used_capacity(), 1);
         assert!(limiter.try_recv(1));
+        assert!(limiter.get_used_capacity(), 2);
         assert!(!limiter.try_recv(2));
 
         // Test the evict_expired_timestamps function.

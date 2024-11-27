@@ -676,11 +676,12 @@ fn test_sending_fail_with_net_error() {
     // need to wait receiver handle the snapshot request
     sleep_ms(100);
 
-    // peer2 can't receive any snapshot, so it doesn't have any key valuse.
-    // but the receiving_count should be zero if receiving snapshot is failed.
+    // peer2 can't receive any snapshot, so it doesn't have any key values.
+    // but the receiving_count should be zero if receiving snapshot failed.
     let engine2 = cluster.get_engine(2);
     must_get_none(&engine2, b"k1");
     assert_eq!(cluster.get_snap_mgr(2).stats().receiving_count, 0);
+    assert_eq!(cluster.get_snap_mgr(2).stats().recv_cap_used, 0);
 }
 
 /// Logs scan are now moved to raftlog gc threads. The case is to test if logs
@@ -1150,4 +1151,53 @@ fn test_snapshot_receiver_busy() {
     fail::remove("before_region_gen_snap");
     fail::remove("receiving_snapshot_callback");
     fail::remove("snap_gen_precheck_failed");
+}
+
+#[test]
+fn test_snapshot_receiver_not_busy_when_sink_is_slow() {
+    let mut cluster = new_server_cluster(0, 2);
+    // Test that a snapshot generation is paused when the receiver is busy. To
+    // trigger the scenario, two regions are set up to send snapshots to the
+    // same store concurrently while configuring the receiving limit to 1.
+    cluster.cfg.server.concurrent_recv_snap_limit = 1;
+    cluster.cfg.raft_store.raft_log_gc_tick_interval = ReadableDuration::secs(60);
+
+    let pd_client = Arc::clone(&cluster.pd_client);
+    // Disable default max peer count check.
+    pd_client.disable_default_operator();
+
+    let r1 = cluster.run_conf_change();
+    cluster.must_put(b"k1", b"v1");
+    cluster.must_put(b"k3", b"v3");
+
+    // Do a split to create the second region.
+    let region = cluster.get_region(b"k1");
+    cluster.must_split(&region, b"k2");
+
+    let r2 = cluster.get_region(b"k1").id;
+
+    // When a snapshot receiver is busy, we want the snapshot generation to
+    // pause and wait until the receiver becomes available. For the two regions
+    // in this test, there should only be two snapshot generations in total.
+    fail::cfg("before_region_gen_snap", "2*print()->panic()").unwrap();
+
+    // The first snapshot task will be stalled at sink. Only one will be able to proceed and it will be stalled. 
+    fail::cfg("receiving_snapshot_sink_slow", "pause").unwrap();
+    pd_client.must_add_peer(r1, new_peer(2, 2));
+    // Wait until the first snapshot is applied.
+    must_get_equal(&cluster.get_engine(2), b"k3", b"v3");
+
+    pd_client.must_add_peer(r2, new_peer(2, 1002));
+    // Unblock the first snapshot task when the precheck fails on the second
+    // snapshot task.
+    fail::cfg_callback("snap_gen_precheck_failed", || {
+        fail::remove("receiving_snapshot_sink_slow");
+    })
+    .unwrap();
+
+    // Ensure that both regions work.
+    must_get_equal(&cluster.get_engine(2), b"k1", b"v1");
+    
+    fail::remove("before_region_gen_snap");
+    fail::remove("on_recv_snap_busy");
 }
