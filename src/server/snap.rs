@@ -5,7 +5,7 @@ use std::{
     io::{Error as IoError, ErrorKind, Read, Write},
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
     time::{Duration, Instant as StdInstant},
@@ -369,11 +369,17 @@ fn recv_snap<R: RaftExtension + 'static>(
     sink: ClientStreamingSink<Done>,
     snap_mgr: SnapManager,
     raft_router: R,
+    recving_count: Arc<AtomicUsize>,
 ) -> impl Future<Output = Result<()>> {
+    let region_id = Arc::new(AtomicU64::new(0));
+    let region_id_clone = region_id.clone();
+    let snap_mgr_clone = snap_mgr.clone();
     let recv_task = async move {
         let mut stream = stream.map_err(Error::from);
         let head = stream.next().await.transpose()?;
         let mut context = RecvSnapContext::new(head, &snap_mgr)?;
+        // Record the region_id for later cleanup.
+        region_id.store(context.raft_msg.region_id, Ordering::SeqCst);
         if context.file.is_none() {
             return context.finish(raft_router);
         }
@@ -403,12 +409,14 @@ fn recv_snap<R: RaftExtension + 'static>(
                 return Err(e);
             }
         }
-        // Notify the snapshot manager that a snapshot has been received,
-        // freeing up the associated resource in the concurrency limiter.
-        snap_mgr.recv_snap_complete(context.raft_msg.region_id);
         context.finish(raft_router)
     };
     async move {
+        defer!(cleanup_after_recv(
+            region_id_clone,
+            snap_mgr_clone,
+            recving_count
+        ));
         match recv_task.await {
             Ok(()) => {
                 fail_point!("receiving_snapshot_sink_slow");
@@ -420,6 +428,30 @@ fn recv_snap<R: RaftExtension + 'static>(
             }
         }
     }
+}
+
+fn cleanup_after_recv(
+    region_id: Arc<AtomicU64>,
+    snap_mgr: SnapManager,
+    recving_count: Arc<AtomicUsize>,
+) {
+    println!(
+        "receiving_count, before: {}",
+        recving_count.load(Ordering::SeqCst)
+    );
+
+    recving_count.fetch_sub(1, Ordering::SeqCst);
+    let id = region_id.load(Ordering::SeqCst);
+    println!("in cleanup_after_recv, region_id={}", id);
+    if id != 0 {
+        // Notify the snapshot manager that a snapshot has been received,
+        // freeing up the associated resource in the concurrency limiter.
+        snap_mgr.recv_snap_complete(id);
+    }
+    println!(
+        "receiving_count, after: {}",
+        recving_count.load(Ordering::SeqCst)
+    );
 }
 
 pub struct Runner<R: RaftExtension> {
@@ -519,6 +551,7 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
         match task {
             Task::Recv { stream, sink } => {
                 if let Some(status) = self.receiving_busy() {
+                    fail_point!("on_recv_snap_busy");
                     SNAP_TASK_COUNTER_STATIC.recv_dropped.inc();
                     self.pool.spawn(sink.fail(status));
                     return;
@@ -530,11 +563,13 @@ impl<R: RaftExtension + 'static> Runnable for Runner<R> {
                 let raft_router = self.raft_router.clone();
                 let recving_count = Arc::clone(&self.recving_count);
                 recving_count.fetch_add(1, Ordering::SeqCst);
-                println!("recving_count incremented to {}", recving_count.load(Ordering::SeqCst));
+                println!(
+                    "recving_count incremented to {}",
+                    self.recving_count.load(Ordering::SeqCst)
+                );
                 let task = async move {
-                    let result = recv_snap(stream, sink, snap_mgr, raft_router).await;
-                    recving_count.fetch_sub(1, Ordering::SeqCst);
-                    println!("recving_count decremented to {}", recving_count.load(Ordering::SeqCst));
+                    let result =
+                        recv_snap(stream, sink, snap_mgr, raft_router, recving_count).await;
                     if let Err(e) = result {
                         error!("failed to recv snapshot"; "err" => %e);
                     }
