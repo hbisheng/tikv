@@ -629,7 +629,7 @@ impl SplitCheckTrigger {
     }
 
     pub fn post_split(&mut self) {
-        println!("***** post_split is called");
+        println!("********************** post_split is called");
         self.size_diff_hint = 0;
         self.may_split_keys = None;
         self.may_split_size = None;

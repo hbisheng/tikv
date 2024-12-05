@@ -6091,8 +6091,8 @@ where
             );
             return;
         }
-        println!("***** split check has been scheduled! <=========");
         self.fsm.peer.split_check_trigger.post_triggered();
+        println!("***** split check has been scheduled! <=========");
     }
 
     fn on_prepare_split_region(

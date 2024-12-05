@@ -569,7 +569,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         policy: CheckPolicy,
         bucket_ranges: Option<Vec<BucketRange>>,
     ) {
-        println!("***** check_split_and_bucket is called");
+        println!("********** check_split_and_bucket is called");
         let mut cached;
         let tablet = match &self.engine {
             Either::Left(e) => e,
@@ -611,7 +611,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             .new_split_checker_host(region, tablet, auto_split, policy);
 
         if host.skip() {
-            println!("***** check_split_and_bucket(), host.skip() is true");
+            println!("********** check_split_and_bucket(), host.skip() is true |||||||||||||");
             debug!("skip split check";
                 "region_id" => region.get_id(),
                 "is_key_range" => is_key_range,
@@ -622,7 +622,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         }
 
 
-        println!("***** host.policy(): {:?}", host.policy());
+        println!("********** host.policy(): {:?}", host.policy());
         let split_keys = match host.policy() {
             CheckPolicy::Scan => {
                 match self.scan_split_keys(
@@ -642,7 +642,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                             "start_key" => log_wrappers::Value::key(&start_key),
                             "end_key" => log_wrappers::Value::key(&end_key),
                         );
-                        println!("***** check_split_and_bucket(), failed to scan");
+                        println!("********** check_split_and_bucket(), failed to scan");
                         return;
                     }
                 }
@@ -667,7 +667,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                         .collect()
                 }
                 Err(e) => {
-                    println!("***** check_split_and_bucket(), failed to get approximate split key, try scan way");
+                    println!("********** check_split_and_bucket(), failed to get approximate split key, try scan way");
                     error!(%e;
                         "failed to get approximate split key, try scan way";
                         "region_id" => region_id,
@@ -686,7 +686,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                     ) {
                         Ok(keys) => keys,
                         Err(e) => {
-                            println!("***** check_split_and_bucket(), failed to scan split key");
+                            println!("********** check_split_and_bucket(), failed to scan split key");
                             error!(%e; "failed to scan split key";
                                 "region_id" => region_id,
                                 "is_key_range" => is_key_range,
@@ -716,12 +716,12 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             );
 
             let region_epoch = region.get_region_epoch().clone();
-            println!("***** check_split_and_bucket(), ask_split() is called <=============");
+            println!("********** check_split_and_bucket(), ask_split() is called <=============");
             self.router
                 .ask_split(region_id, region_epoch, split_keys, "split checker".into());
             CHECK_SPILT_COUNTER.success.inc();
         } else {
-            println!("***** check_split_and_bucket(), no split key, not send");
+            println!("********** check_split_and_bucket(), no split key, no need to send |||||||||||||");
             debug!(
                 "no need to send, split key not found";
                 "region_id" => region_id,
@@ -745,7 +745,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         end_key: &[u8],
         bucket_ranges: Option<Vec<BucketRange>>,
     ) -> Result<Vec<Vec<u8>>> {
-        println!("***** scan_split_keys is called");
+        println!("********** scan_split_keys is called");
         let timer = CHECK_SPILT_HISTOGRAM.start_coarse_timer();
         let mut buckets = Vec::new();
         let mut bucket = Bucket::default();
@@ -761,7 +761,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             };
         let mut split_keys = vec![];
 
-        println!("***** scan_split_keys, debug: host.split_keys() => {:?}", host.split_keys());
+        println!("********** scan_split_keys, debug: host.split_keys() => {:?}", host.split_keys());
 
         MergedIterator::<<EK as Iterable>::Iterator>::new(
             tablet, LARGE_CFS, start_key, end_key, false,
@@ -876,7 +876,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             self.refresh_region_buckets(buckets, region, bucket_ranges);
         }
         timer.observe_duration();
-
+        println!("********** final split_keys: => {:?}", split_keys);
         Ok(split_keys)
     }
 
