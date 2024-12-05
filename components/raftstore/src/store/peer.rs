@@ -4293,6 +4293,7 @@ where
         poll_ctx: &mut PollContext<EK, ER, T>,
         req: &mut RaftCmdRequest,
     ) -> Result<ProposalContext> {
+        println!("pre_propose is called, req:{:?}", req);
         poll_ctx
             .coprocessor_host
             .pre_propose(self.region(), req)
@@ -4302,7 +4303,7 @@ where
                 // means we may have so many potential duplicate mvcc versions
                 // that we can not manage to get a valid split key. So, we
                 // trigger a compaction to handle it.
-                print!("coprocessor_host.prepropose returned error => {}", e.to_string());
+                println!("coprocessor_host.prepropose returned error => {}\n", e.to_string());
                 if e.to_string().contains(NO_VALID_SPLIT_KEY) {
                     let safe_ts = (|| {
                         fail::fail_point!("safe_point_inject", |t| {
@@ -4310,7 +4311,7 @@ where
                         });
                         poll_ctx.safe_point.load(Ordering::Relaxed)
                     })();
-                    print!("safe_ts: {}, self.last_record_safe_point: {}", safe_ts, self.last_record_safe_point);
+                    println!("safe_ts: {}, self.last_record_safe_point: {}", safe_ts, self.last_record_safe_point);
                     if safe_ts <= self.last_record_safe_point {
                         debug!(
                             "skip schedule compact range due to safe_point not updated";
@@ -4320,7 +4321,7 @@ where
                         return e;
                     }
 
-                    print!("starting compaction jobs!");
+                    println!("starting compaction jobs!");
                     let start_key = enc_start_key(self.region());
                     let end_key = enc_end_key(self.region());
 
