@@ -6011,7 +6011,9 @@ where
     }
 
     fn on_split_region_check_tick(&mut self) {
+        println!("***** on_split_region_check_tick is called()");
         if !self.fsm.peer.is_leader() {
+            println!("***** on_split_region_check_tick: not leader");
             return;
         }
 
@@ -6028,6 +6030,7 @@ where
             .split_check_trigger
             .should_skip(self.ctx.cfg.region_split_check_diff().0)
         {
+            println!("***** on_split_region_check_tick: should skip");
             return;
         }
 
@@ -6038,11 +6041,13 @@ where
         // have finished.
         // TODO: check whether a gc progress has been started.
         if self.ctx.split_check_scheduler.is_busy() {
+            println!("***** on_split_region_check_tick: is_busy");
             return;
         }
 
         // To avoid run the check if it's splitting.
         if self.fsm.peer.is_splitting() {
+            println!("***** on_split_region_check_tick: is splitting");
             return;
         }
 
@@ -6052,6 +6057,7 @@ where
         if self.ctx.importer.get_mode() == SwitchMode::Import
             || self.ctx.importer.region_in_import_mode(self.region())
         {
+            println!("***** on_split_region_check_tick: is importing");
             return;
         }
 
@@ -6066,6 +6072,7 @@ where
             && self.fsm.skip_split_count < self.region_split_skip_max_count()
         {
             self.fsm.skip_split_count += 1;
+            println!("***** on_split_region_check_tick: generating snap");
             return;
         }
         self.fsm.skip_split_count = 0;
@@ -6084,6 +6091,7 @@ where
             );
             return;
         }
+        println!("***** on_split_region_check_tick: done!");
         self.fsm.peer.split_check_trigger.post_triggered();
     }
 
