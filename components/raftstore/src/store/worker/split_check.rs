@@ -621,6 +621,8 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             return;
         }
 
+
+        println!("***** host.policy(): {:?}", host.policy());
         let split_keys = match host.policy() {
             CheckPolicy::Scan => {
                 match self.scan_split_keys(
@@ -714,7 +716,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             );
 
             let region_epoch = region.get_region_epoch().clone();
-            println!("***** check_split_and_bucket(), ask_split() is called");
+            println!("***** check_split_and_bucket(), ask_split() is called <=============");
             self.router
                 .ask_split(region_id, region_epoch, split_keys, "split checker".into());
             CHECK_SPILT_COUNTER.success.inc();
@@ -743,6 +745,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         end_key: &[u8],
         bucket_ranges: Option<Vec<BucketRange>>,
     ) -> Result<Vec<Vec<u8>>> {
+        println!("***** scan_split_keys is called");
         let timer = CHECK_SPILT_HISTOGRAM.start_coarse_timer();
         let mut buckets = Vec::new();
         let mut bucket = Bucket::default();
@@ -757,6 +760,8 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                 (!host.enable_region_bucket(), &empty_bucket)
             };
         let mut split_keys = vec![];
+
+        println!("***** scan_split_keys, debug: host.split_keys() => {:?}", host.split_keys());
 
         MergedIterator::<<EK as Iterable>::Iterator>::new(
             tablet, LARGE_CFS, start_key, end_key, false,
