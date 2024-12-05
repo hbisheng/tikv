@@ -6091,7 +6091,7 @@ where
             );
             return;
         }
-        println!("***** on_split_region_check_tick: done!");
+        println!("***** split check has been scheduled! <=========");
         self.fsm.peer.split_check_trigger.post_triggered();
     }
 

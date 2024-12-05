@@ -4300,8 +4300,8 @@ where
         poll_ctx: &mut PollContext<EK, ER, T>,
         req: &mut RaftCmdRequest,
     ) -> Result<ProposalContext> {
-        if req.has_admin_request() {
-            println!("pre_propose is called, req:{:?}", req);
+        if req.has_admin_request() && req.get_admin_request().get_cmd_type() == AdminCmdType::BatchSplit {
+            println!("********************** split request is received in pre_propose *********************");
         }
         poll_ctx
             .coprocessor_host

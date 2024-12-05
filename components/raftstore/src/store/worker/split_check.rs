@@ -569,6 +569,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         policy: CheckPolicy,
         bucket_ranges: Option<Vec<BucketRange>>,
     ) {
+        println!("***** check_split_and_bucket is called");
         let mut cached;
         let tablet = match &self.engine {
             Either::Left(e) => e,
@@ -610,6 +611,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             .new_split_checker_host(region, tablet, auto_split, policy);
 
         if host.skip() {
+            println!("***** check_split_and_bucket(), host.skip() is true");
             debug!("skip split check";
                 "region_id" => region.get_id(),
                 "is_key_range" => is_key_range,
@@ -638,6 +640,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                             "start_key" => log_wrappers::Value::key(&start_key),
                             "end_key" => log_wrappers::Value::key(&end_key),
                         );
+                        println!("***** check_split_and_bucket(), failed to scan");
                         return;
                     }
                 }
@@ -662,6 +665,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                         .collect()
                 }
                 Err(e) => {
+                    println!("***** check_split_and_bucket(), failed to get approximate split key, try scan way");
                     error!(%e;
                         "failed to get approximate split key, try scan way";
                         "region_id" => region_id,
@@ -680,6 +684,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                     ) {
                         Ok(keys) => keys,
                         Err(e) => {
+                            println!("***** check_split_and_bucket(), failed to scan split key");
                             error!(%e; "failed to scan split key";
                                 "region_id" => region_id,
                                 "is_key_range" => is_key_range,
@@ -709,10 +714,12 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             );
 
             let region_epoch = region.get_region_epoch().clone();
+            println!("***** check_split_and_bucket(), ask_split() is called");
             self.router
                 .ask_split(region_id, region_epoch, split_keys, "split checker".into());
             CHECK_SPILT_COUNTER.success.inc();
         } else {
+            println!("***** check_split_and_bucket(), no split key, not send");
             debug!(
                 "no need to send, split key not found";
                 "region_id" => region_id,
