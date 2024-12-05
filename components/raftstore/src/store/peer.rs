@@ -604,6 +604,10 @@ pub struct SplitCheckTrigger {
 
 impl SplitCheckTrigger {
     pub fn should_skip(&self, threshold: u64) -> bool {
+        println!(
+            "***** self.may_skip_split_check: {}, self.compaction_declined_bytes: {}, self.size_diff_hint: {}, threshold: {}", 
+            self.may_skip_split_check, self.compaction_declined_bytes, self.size_diff_hint, threshold);
+
         self.may_skip_split_check
             && self.compaction_declined_bytes < threshold
             && self.size_diff_hint < threshold
