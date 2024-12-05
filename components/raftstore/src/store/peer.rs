@@ -620,13 +620,16 @@ impl SplitCheckTrigger {
         // are small.
         // If either size or keys are big enough to do a split,
         // keep split check tick until split is done
+        println!("***** self.may_split_size: {:?}, self.may_split_keys: {:?}", self.may_split_size, self.may_split_keys);
         if !matches!(self.may_split_size, Some(true)) && !matches!(self.may_split_keys, Some(true))
         {
             self.may_skip_split_check = true;
+            println!("***** self.may_skip_split_check is set to true!!!");
         }
     }
 
     pub fn post_split(&mut self) {
+        println!("***** post_split is called");
         self.size_diff_hint = 0;
         self.may_split_keys = None;
         self.may_split_size = None;
@@ -4297,7 +4300,9 @@ where
         poll_ctx: &mut PollContext<EK, ER, T>,
         req: &mut RaftCmdRequest,
     ) -> Result<ProposalContext> {
-        println!("pre_propose is called, req:{:?}", req);
+        if req.has_admin_request() {
+            println!("pre_propose is called, req:{:?}", req);
+        }
         poll_ctx
             .coprocessor_host
             .pre_propose(self.region(), req)
