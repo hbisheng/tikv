@@ -46,6 +46,7 @@ where
     E: KvEngine,
 {
     fn on_kv(&mut self, _: &mut ObserverContext<'_>, entry: &KeyEntry) -> bool {
+        println!("********** scan_split_keys, on_kv is called, components/raftstore/src/coprocessor/split_check/size.rs");
         let size = entry.entry_size() as u64;
         self.current_size += size;
 

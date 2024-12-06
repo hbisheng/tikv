@@ -37,6 +37,7 @@ where
     E: KvEngine,
 {
     fn on_kv(&mut self, _: &mut ObserverContext<'_>, entry: &KeyEntry) -> bool {
+        println!("********** scan_split_keys, on_kv is called, components/raftstore/src/coprocessor/split_check/half.rs");
         if self.buckets.is_empty() || self.cur_bucket_size >= self.each_bucket_size {
             self.buckets.push(entry.key().to_vec());
             self.cur_bucket_size = 0;

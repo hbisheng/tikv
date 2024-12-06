@@ -48,6 +48,7 @@ where
     E: KvEngine,
 {
     fn on_kv(&mut self, _: &mut ObserverContext<'_>, key: &KeyEntry) -> bool {
+        println!("********** scan_split_keys, on_kv is called, components/raftstore/src/coprocessor/split_check/keys.rs");
         if !key.is_commit_version() {
             return false;
         }

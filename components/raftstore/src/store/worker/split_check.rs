@@ -773,16 +773,21 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             let mut bucket_range_idx = 0;
             let mut skip_on_kv = false;
             while let Some(e) = iter.next() {
+                println!("********** scan_split_keys, called with entry {:?}", e.key());
                 if skip_on_kv && skip_check_bucket {
                     split_keys = host.split_keys();
+                    println!("********** scan_split_keys, skip_on_kv && skip_check_bucket is true, returning split_keys => {:?}", split_keys);
                     return;
                 }
+                
                 if !skip_on_kv && host.on_kv(region, &e) {
+                    println!("********** scan_split_keys, host.on_kv is called");
                     skip_on_kv = true;
                 }
                 size += e.entry_size() as u64;
                 keys += 1;
                 if !skip_check_bucket {
+                    println!("********** scan_split_keys, skip_check_bucket is false");
                     let origin_key = keys::origin_key(e.key());
                     // generate buckets for the whole region,
                     // skip checking bucket range

@@ -30,6 +30,7 @@ where
     /// `status.first_encoded_table_prefix`. it returns the encoded table
     /// prefix of `current_data_key`.
     fn on_kv(&mut self, _: &mut ObserverContext<'_>, entry: &KeyEntry) -> bool {
+        println!("********** scan_split_keys, on_kv is called, components/raftstore/src/coprocessor/split_check/table.rs");
         if self.split_key.is_some() {
             return true;
         }
