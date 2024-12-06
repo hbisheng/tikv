@@ -773,14 +773,13 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             let mut bucket_range_idx = 0;
             let mut skip_on_kv = false;
             while let Some(e) = iter.next() {
-                println!("********** scan_split_keys, called with entry {}", String::from_utf8_lossy(&e.key()));
+                println!("********** scan_split_keys, called with entry {}", to_last_8_hex(e.key()));
                 if skip_on_kv && skip_check_bucket {
                     split_keys = host.split_keys();
                     let strings: Vec<String> = split_keys
                         .iter()
                         .map(|bytes| {
-                            // Convert to Hex string
-                            bytes.iter().map(|byte| format!("{:02x}", byte)).collect::<String>()
+                            to_last_8_hex(bytes)
                         })
                         .collect();
                     println!("********** scan_split_keys, skip_on_kv && skip_check_bucket is true, returning split_keys => {:?}", strings);
@@ -892,8 +891,7 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
         let strings: Vec<String> = split_keys
             .iter()
             .map(|bytes| {
-                // Convert to Hex string
-                bytes.iter().map(|byte| format!("{:02x}", byte)).collect::<String>()
+                to_last_8_hex(bytes)
             })
             .collect();
         println!("********** final split_keys: => {:?}", strings);
@@ -910,6 +908,20 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             "change" => ?change
         );
     }
+}
+
+fn to_last_8_hex(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<String>()
+        .chars()
+        .rev()
+        .take(8)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
 }
 
 impl<EK, S> Runnable for Runner<EK, S>
