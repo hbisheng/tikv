@@ -773,10 +773,14 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             let mut bucket_range_idx = 0;
             let mut skip_on_kv = false;
             while let Some(e) = iter.next() {
-                println!("********** scan_split_keys, called with entry {:?}", e.key());
+                println!("********** scan_split_keys, called with entry {}", String::from_utf8_lossy(&e.key()));
                 if skip_on_kv && skip_check_bucket {
                     split_keys = host.split_keys();
-                    println!("********** scan_split_keys, skip_on_kv && skip_check_bucket is true, returning split_keys => {:?}", split_keys);
+                    let strings: Vec<String> = split_keys
+                        .iter()
+                        .map(|bytes| String::from_utf8(bytes.clone()).expect("Invalid UTF-8"))
+                        .collect();
+                    println!("********** scan_split_keys, skip_on_kv && skip_check_bucket is true, returning split_keys => {:?}", strings);
                     return;
                 }
                 
@@ -881,7 +885,12 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             self.refresh_region_buckets(buckets, region, bucket_ranges);
         }
         timer.observe_duration();
-        println!("********** final split_keys: => {:?}", split_keys);
+
+        let strings: Vec<String> = split_keys
+            .iter()
+            .map(|bytes| String::from_utf8(bytes.clone()).expect("Invalid UTF-8"))
+            .collect();
+        println!("********** final split_keys: => {:?}", strings);
         Ok(split_keys)
     }
 
