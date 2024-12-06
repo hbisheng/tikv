@@ -778,7 +778,10 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
                     split_keys = host.split_keys();
                     let strings: Vec<String> = split_keys
                         .iter()
-                        .map(|bytes| String::from_utf8(bytes.clone()).expect("Invalid UTF-8"))
+                        .map(|bytes| {
+                            // Convert to Hex string
+                            bytes.iter().map(|byte| format!("{:02x}", byte)).collect::<String>()
+                        })
                         .collect();
                     println!("********** scan_split_keys, skip_on_kv && skip_check_bucket is true, returning split_keys => {:?}", strings);
                     return;
@@ -888,7 +891,10 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
 
         let strings: Vec<String> = split_keys
             .iter()
-            .map(|bytes| String::from_utf8(bytes.clone()).expect("Invalid UTF-8"))
+            .map(|bytes| {
+                // Convert to Hex string
+                bytes.iter().map(|byte| format!("{:02x}", byte)).collect::<String>()
+            })
             .collect();
         println!("********** final split_keys: => {:?}", strings);
         Ok(split_keys)
