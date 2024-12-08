@@ -194,6 +194,10 @@ impl<C: StoreHandle, E: KvEngine> SplitCheckObserver<E> for SizeCheckObserver<C>
             )));
         } else {
             // Does not need to check size.
+            println!(
+                "(size.rs) approximate size less than threshold, does not need to do split check, region_id=>{}, size=>{}, threshold=>{}",
+                region.get_id(), region_size, host.cfg.region_max_size().0,
+            );
             debug!(
                 "approximate size less than threshold, does not need to do split check";
                 "region_id" => region.get_id(),

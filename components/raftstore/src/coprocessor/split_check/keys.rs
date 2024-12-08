@@ -184,6 +184,10 @@ impl<C: StoreHandle, E: KvEngine> SplitCheckObserver<E> for KeysCheckObserver<C>
             )));
         } else {
             // Does not need to check keys.
+            println!(
+                "(keys.rs) approximate size less than threshold, does not need to do split check, region_id=>{}, region_keys=>{}, threshold=>{}",
+                region.get_id(), region_keys, host.cfg.region_max_size().0,
+            );
             debug!(
                 "approximate keys less than threshold, does not need to do split check";
                 "region_id" => region.get_id(),
