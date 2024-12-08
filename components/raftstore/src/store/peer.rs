@@ -640,7 +640,10 @@ impl SplitCheckTrigger {
     pub fn add_size_diff(&mut self, size_diff: i64) {
         let diff = self.size_diff_hint as i64 + size_diff;
         self.size_diff_hint = cmp::max(diff, 0) as u64;
-        println!("[TEST triggered] size_diff={}, size_diff_hint={}", size_diff, self.size_diff_hint);
+        if size_diff != 0 {
+            println!("[TEST code] self.may_skip_split_check={}, size_diff={}, size_diff_hint={}", 
+                self.may_skip_split_check, size_diff, self.size_diff_hint);
+        }
     }
 
     pub fn reset_skip_check(&mut self) {
@@ -3509,6 +3512,10 @@ where
         self.peer_stat.written_keys += apply_metrics.written_keys;
         self.peer_stat.written_bytes += apply_metrics.written_bytes;
         self.delete_keys_hint += apply_metrics.delete_keys_hint;
+
+        if apply_metrics.size_diff_hint != 0 {
+            println!("[TEST code] peer={}, add {}", self.peer.get_id(), apply_metrics.size_diff_hint);
+        }
         self.split_check_trigger
             .add_size_diff(apply_metrics.size_diff_hint);
 
