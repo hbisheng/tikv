@@ -761,8 +761,6 @@ impl<EK: KvEngine, S: StoreHandle> Runner<EK, S> {
             };
         let mut split_keys = vec![];
 
-        println!("********** scan_split_keys, debug: host.split_keys() => {:?}", host.split_keys());
-
         MergedIterator::<<EK as Iterable>::Iterator>::new(
             tablet, LARGE_CFS, start_key, end_key, false,
         )

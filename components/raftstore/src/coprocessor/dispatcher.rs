@@ -433,6 +433,7 @@ macro_rules! loop_ob {
         let mut ctx = ObserverContext::new($r);
         for o in $obs {
             loop_ob!(_exec $res_type, o.observer, $hook, &mut ctx, $($args)*);
+            println!("ctx.bypass = {}", ctx.bypass);
             if ctx.bypass {
                 break;
             }

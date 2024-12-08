@@ -213,6 +213,7 @@ impl QueryObserver for Arc<PrepareDiskSnapObserver> {
             if req.has_ingest_sst() {
                 // Note: this will reject the batch of commands, which isn't so effective.
                 // But we cannot reject proposing a subset of command for now...
+                println!("yeah, cx.bypass is set to true in fn pre_propose_query()");
                 cx.bypass = true;
                 metrics::SNAP_BR_SUSPEND_COMMAND_TYPE
                     .with_label_values(&["Ingest"])

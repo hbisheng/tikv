@@ -641,8 +641,8 @@ impl SplitCheckTrigger {
         let diff = self.size_diff_hint as i64 + size_diff;
         self.size_diff_hint = cmp::max(diff, 0) as u64;
         if size_diff != 0 {
-            println!("[TEST code] self.may_skip_split_check={}, size_diff={}, size_diff_hint={}", 
-                self.may_skip_split_check, size_diff, self.size_diff_hint);
+            println!("[TEST code] size_diff delta={}, size_diff_hint={}", 
+                size_diff, self.size_diff_hint);
         }
     }
 
