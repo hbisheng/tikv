@@ -1649,7 +1649,7 @@ fn test_split_region_with_no_valid_split_keys() {
         let key = Key::from_raw(raw_key.as_bytes());
         let key = key.append_ts(TimeStamp::new(i));
         cluster.must_put_cf(CF_WRITE, key.as_encoded(), b"val");
-        println!("[TEST code] finish putting key => {}", to_last_8_hex(key.as_encoded()));
+        println!("[TEST code] i={} finish putting key => {}", i, to_last_8_hex(key.as_encoded()));
     }
 
     // one for default cf, one for write cf

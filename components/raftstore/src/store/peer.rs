@@ -640,6 +640,7 @@ impl SplitCheckTrigger {
     pub fn add_size_diff(&mut self, size_diff: i64) {
         let diff = self.size_diff_hint as i64 + size_diff;
         self.size_diff_hint = cmp::max(diff, 0) as u64;
+        println!("[TEST triggered] size_diff={}, size_diff_hint={}", size_diff, self.size_diff_hint);
     }
 
     pub fn reset_skip_check(&mut self) {
