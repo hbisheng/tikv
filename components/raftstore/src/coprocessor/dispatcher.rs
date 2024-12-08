@@ -704,6 +704,7 @@ impl<E: KvEngine> CoprocessorHost<E> {
         auto_split: bool,
         policy: CheckPolicy,
     ) -> SplitCheckerHost<'a, E> {
+        println!("********** new_split_checker_host is called, self.registry.split_check_observers.len()={}", self.registry.split_check_observers.len());
         let mut host = SplitCheckerHost::new(auto_split, &self.cfg);
         loop_ob!(
             region,
