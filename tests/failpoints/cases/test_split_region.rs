@@ -1627,6 +1627,7 @@ fn to_last_8_hex(bytes: &[u8]) -> String {
 fn test_split_region_with_no_valid_split_keys() {
     let mut cluster = test_raftstore::new_node_cluster(0, 3);
     cluster.cfg.coprocessor.region_split_size = Some(ReadableSize::kb(1));
+    cluster.cfg.raft_store.region_split_check_diff = Some(ReadableSize::kb(1));
     cluster.cfg.raft_store.split_region_check_tick_interval = ReadableDuration::millis(500);
     cluster.run();
 
