@@ -2595,7 +2595,7 @@ where
         );
 
         let msg_type = msg.get_message().get_msg_type();
-        let _fp_enable = |target_msg_type: MessageType| -> bool {
+        let fp_enable = |target_msg_type: MessageType| -> bool {
             self.fsm.region_id() == 1000
                 && self.store_id() == 2
                 && !is_initialized_peer
