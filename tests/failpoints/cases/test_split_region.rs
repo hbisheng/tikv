@@ -1608,6 +1608,21 @@ fn test_not_reset_has_dirty_data_due_to_slow_split() {
     cluster.must_put(b"k00001", b"val");
 }
 
+
+fn to_last_8_hex(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<String>()
+        .chars()
+        .rev()
+        .take(8)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
+}
+
 #[test]
 fn test_split_region_with_no_valid_split_keys() {
     let mut cluster = test_raftstore::new_node_cluster(0, 3);
