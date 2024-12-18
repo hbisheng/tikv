@@ -462,8 +462,8 @@ impl<E: Engine> Endpoint<E> {
             return Err(Error::Region(err));
         }
         info!(
-            "jepsen cop handle_unary_request_impl snapshot got"; 
-            "req_ctx" => ?tracker.req_ctx, 
+            "jepsen cop handle_unary_request_impl snapshot got";
+            "req_ctx" => ?tracker.req_ctx,
             "in_memory_engine_hit" => snapshot.ext().in_memory_engine_hit(),
             "applied_index" => snapshot.ext().get_applied_index(),
         );
@@ -506,8 +506,8 @@ impl<E: Engine> Endpoint<E> {
         let (exec_details, exec_details_v2) = tracker.get_exec_details();
         tracker.on_finish_all_items();
         info!(
-            "jepsen cop handle finish"; 
-            "return_rows" => exec_summary.num_produced_rows, 
+            "jepsen cop handle finish";
+            "return_rows" => exec_summary.num_produced_rows,
             "req_ctx" => ?tracker.req_ctx
         );
 

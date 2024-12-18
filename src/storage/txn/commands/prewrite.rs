@@ -1641,7 +1641,9 @@ mod tests {
                 false
             }
 
-            fn get_applied_index(&self) -> u64 {0}
+            fn get_applied_index(&self) -> u64 {
+                0
+            }
         }
 
         impl Snapshot for MockSnapshot {

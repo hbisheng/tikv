@@ -325,6 +325,15 @@ where
         create_by_peer: metapb::Peer,
     ) -> Result<SenderFsmPair<EK, ER>> {
         // We will remove tombstone key when apply snapshot
+        println!(
+            "Replicate peer; region_id={}, peer_id={}, store_id={}, create_by_peer_id={}, create_by_peer_store_id={}",
+            region_id,
+            peer.get_id(),
+            store_id,
+            create_by_peer.get_id(),
+            create_by_peer.get_store_id()
+        );
+
         info!(
             "replicate peer";
             "region_id" => region_id,
@@ -3285,7 +3294,14 @@ where
     /// then it's appropriate to destroy it immediately.
     fn need_gc_merge(&mut self, msg: &RaftMessage) -> Result<bool> {
         let merge_target = msg.get_merge_target();
+        // id: 15822,
+        // start_key:
+        // 6D44423A31000000FF00FB000000000000FF00685461626C653AFF3232FF0000000000FF000000F700000000FB
+        //   end_key:
+        // 6D44423A31000000FF00FB000000000000FF00685461626C653AFF3238FF0000000000FF000000F700000000FB
+        // region_epoch { conf_ver: 17 version: 245 }
         let target_region_id = merge_target.get_id();
+        // target_region_id = 15822
         debug!(
             "receive merge target";
             "region_id" => self.fsm.region_id(),
@@ -3302,16 +3318,19 @@ where
         meta.targets_map.insert(self.region_id(), target_region_id);
         let v = meta
             .pending_merge_targets
-            .entry(target_region_id)
+            .entry(target_region_id) // 15822
             .or_default();
         let mut no_range_merge_target = merge_target.clone();
         no_range_merge_target.clear_start_key();
         no_range_merge_target.clear_end_key();
-        if let Some(pre_merge_target) = v.insert(self.region_id(), no_range_merge_target) {
+        if let Some(pre_merge_target) =
+            v.insert(self.region_id() /* 12695 */, no_range_merge_target)
+        {
             // Merge target epoch records the version of target region when source region is
             // merged. So it must be same no matter when receiving merge target.
             if pre_merge_target.get_region_epoch().get_version()
                 != merge_target.get_region_epoch().get_version()
+            // region_epoch { conf_ver: 17 version: 245 }
             {
                 panic!(
                     "conflict merge target epoch version {:?} {:?}",
@@ -3357,6 +3376,11 @@ where
                     "something is wrong, maybe PD do not ensure all target peers exist before merging"
                 );
             }
+            // println!(
+            //     "something is wrong, maybe PD do not ensure all target peers exist before merging, {:?}",
+            //     msg
+            // );
+
             error!(
                 "something is wrong, maybe PD do not ensure all target peers exist before merging"
             );
@@ -3410,6 +3434,12 @@ where
             return Ok(Either::Right(vec![]));
         }
 
+        println!(
+            "***** [region={}][peer_id={}][check_snapshot] msg: {:?}",
+            self.region_id(),
+            self.fsm.peer_id(),
+            msg
+        );
         let region_id = msg.get_region_id();
         let snap = msg.get_message().get_snapshot();
         let mut snap_data = RaftSnapshotData::default();
@@ -3456,6 +3486,11 @@ where
         let snap_enc_start_key = enc_start_key(&snap_region);
         let snap_enc_end_key = enc_end_key(&snap_region);
 
+        fail_point!(
+            "before_check_snapshot_1000_3",
+            self.fsm.region_id() == 1000 && self.store_id() == 3,
+            |_| { unreachable!() }
+        );
         let before_check_snapshot_1_2_fp = || -> bool {
             fail_point!(
                 "before_check_snapshot_1_2",
@@ -3582,14 +3617,21 @@ where
             .take_while(|r| enc_start_key(r) < snap_enc_end_key)
             .filter(|r| r.get_id() != region_id)
         {
+            println!(
+                "***** region overlapped, region_id: {}, peer_id: {}, exist_region: {:?}, snap_region: {:?}",
+                self.fsm.region_id(),
+                self.fsm.peer_id(),
+                exist_region,
+                snap_region
+            );
             info!(
                 "region overlapped";
-                "region_id" => self.fsm.region_id(),
-                "peer_id" => self.fsm.peer_id(),
-                "exist" => ?exist_region,
-                "snap" => ?snap_region,
+                "region_id" => self.fsm.region_id(), // 15822
+                "peer_id" => self.fsm.peer_id(), // 15824
+                "exist" => ?exist_region, // id: 12695, region_epoch { conf_ver: 17 version: 235 }
+                "snap" => ?snap_region, // id: 15822, region_epoch { conf_ver: 17 version: 247 }
             );
-            let (can_destroy, merge_to_this_peer) = maybe_destroy_source(
+            let (can_destroy /* true */, merge_to_this_peer /* true */) = maybe_destroy_source(
                 &meta,
                 self.fsm.region_id(),
                 self.fsm.peer_id(),
@@ -3617,9 +3659,11 @@ where
             }
         }
         if is_overlapped {
+            println!("***** The snapshot DROPPED! {:?}", msg);
             self.ctx.raft_metrics.message_dropped.region_overlap.inc();
             return Ok(Either::Left(key));
         }
+        println!("***** The snapshot is NOT dropped! {:?}", msg);
 
         // WARNING: The checking code must be above this line.
         // Now all checking passed.
@@ -4536,6 +4580,12 @@ where
                 is_uninitialized_peer_exist = true;
                 self.ctx.router.close(new_region_id);
             }
+
+            println!(
+                "***** [store={}][region={}][on_ready_split_region] insert new region; {:?}, is_uninitialized_peer_exist={}",
+                self_store_id, new_region_id, new_region, is_uninitialized_peer_exist,
+            );
+
             info!(
                 "insert new region";
                 "region_id" => new_region_id,
@@ -4643,10 +4693,10 @@ where
     /// ensure all target peers exist. So if not, error log will be printed
     /// and return false.
     fn is_merge_target_region_stale(&self, target_region: &metapb::Region) -> Result<bool> {
-        let target_region_id = target_region.get_id();
+        let target_region_id = target_region.get_id(); // id: 15822 
         let target_peer_id = find_peer(target_region, self.ctx.store_id())
             .unwrap()
-            .get_id();
+            .get_id(); // target_peer_id=15824
 
         let state_key = keys::region_state_key(target_region_id);
         if let Some(target_state) = self
@@ -4714,12 +4764,24 @@ where
                 );
             }
         } else {
+            println!(
+                "failed to load target peer's RegionLocalState from kv engine; target_peer_id={}, target_region={:?}, region_id={}, peer_id={}",
+                target_peer_id,
+                target_region,
+                self.fsm.region_id(),
+                self.fsm.peer_id()
+            );
+
             error!(
                 "failed to load target peer's RegionLocalState from kv engine";
-                "target_peer_id" => target_peer_id,
+                "target_peer_id" => target_peer_id, // target_peer_id=15824
                 "target_region" => ?target_region,
-                "region_id" => self.fsm.region_id(),
-                "peer_id" => self.fsm.peer_id(),
+                // id: 15822,
+                // start_key: 6D44423A31000000FF00FB000000000000FF00685461626C653AFF3232FF0000000000FF000000F700000000FB
+                //   end_key: 6D44423A31000000FF00FB000000000000FF00685461626C653AFF3238FF0000000000FF000000F700000000FB
+                // region_epoch { conf_ver: 17 version: 245 }
+                "region_id" => self.fsm.region_id(), // 12695
+                "peer_id" => self.fsm.peer_id(), // 12697
             );
         }
         Ok(false)
@@ -7255,16 +7317,18 @@ pub fn maybe_destroy_source(
 ) -> (bool, bool) {
     if let Some(merge_targets) = meta.pending_merge_targets.get(&target_region_id) {
         if let Some(target_region) = merge_targets.get(&source_region_id) {
-            info!(
+            println!(
                 "[region {}] checking source {} epoch: {:?}, merge target epoch: {:?}",
-                target_region_id,
-                source_region_id,
-                region_epoch,
-                target_region.get_region_epoch(),
+                target_region_id,                 // 15822
+                source_region_id,                 // 12695
+                region_epoch,                     // 247, this comes from the message
+                target_region.get_region_epoch(), // 245, comes from pending_merge_targets
             );
             // The target peer will move on, namely, it will apply a snapshot generated
             // after merge, so destroy source peer.
-            if region_epoch.get_version() > target_region.get_region_epoch().get_version() {
+            if region_epoch.get_version() /* 247 */ > target_region.get_region_epoch().get_version()
+            // 245
+            {
                 return (
                     true,
                     target_peer_id

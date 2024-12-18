@@ -2214,6 +2214,7 @@ fn test_destroy_race_during_atomic_snapshot_after_merge() {
             }
         }));
     cluster.sim.wl().add_recv_filter(3, Box::new(left_filter));
+
     // Block messages to target peer on store 3.
     let right_filter_block = Arc::new(atomic::AtomicBool::new(true));
     let new_peer_id = 1004;
@@ -2268,4 +2269,67 @@ fn test_destroy_race_during_atomic_snapshot_after_merge() {
     // New peer applies snapshot eventually.
     cluster.must_transfer_leader(right.get_id(), new_peer(3, new_peer_id));
     cluster.must_put(b"k4", b"v4");
+}
+
+#[test]
+fn test_node_merge_split_race() {
+    let mut cluster = new_node_cluster(0, 3);
+    configure_for_merge(&mut cluster.cfg);
+    cluster.cfg.raft_store.store_batch_system.max_batch_size = Some(1);
+    cluster.cfg.raft_store.store_batch_system.pool_size = 1;
+    cluster.cfg.raft_store.dev_assert = false;
+    let pd_client = Arc::clone(&cluster.pd_client);
+    pd_client.disable_default_operator();
+
+    cluster.run();
+
+    // Peer 3 won't be able to split.
+    fail::cfg("apply_before_split_1_3", "pause").unwrap();
+    fail::cfg("apply_after_split_1_3", "pause").unwrap();
+    fail::cfg("before_check_snapshot_1000_3", "pause").unwrap();
+
+    // To ensure the region has applied to its current term so that later `split`
+    // can success without any retries. Then, `left_peer_3` will must be `1003`.
+    let region = pd_client.get_region(b"k1").unwrap();
+    let peer_1 = find_peer(&region, 1).unwrap().to_owned();
+    // region 1, leader is peer 1.
+    cluster.must_transfer_leader(region.get_id(), peer_1);
+
+    let k = b"k1_for_apply_to_current_term";
+    cluster.must_put(k, b"value");
+    must_get_equal(&cluster.get_engine(1), k, b"value");
+
+    cluster.must_split(&region, b"k2");
+
+    cluster.must_put(b"k1", b"v1");
+    cluster.must_put(b"k3", b"v3");
+
+    let left = pd_client.get_region(b"k1").unwrap();
+    let right = pd_client.get_region(b"k2").unwrap();
+
+    cluster.must_try_merge(right.get_id(), left.get_id());
+
+    pd_client.check_merged_timeout(right.get_id(), Duration::from_secs(5));
+
+    // Expected event sequence:
+    // 1. Peer 3 receives a GC message that set up the merge target (region 1 ->
+    //    region 1000).
+    // 2. Peer 1003 (region 1000) is created.
+    // 3. Peer 3 continues with the split.
+    // 4. Peer 1003 receives the snapshot and perform the snapshot check.
+    
+    // Need to wait for the merged region reply a GC message. 
+    sleep_ms(100);
+    fail::remove("apply_before_split_1_3");
+
+    // How to ensure it reaches the next failpoint `apply_after_split_1_3`? And
+    // pause there?
+    sleep_ms(100);
+
+    fail::remove("before_check_snapshot_1000_3");
+
+    cluster.must_put(b"k4", b"v4");
+    must_get_equal(&cluster.get_engine(3), b"k4", b"v4");
+
+    must_get_equal(&cluster.get_engine(3), b"k4", b"v5");
 }

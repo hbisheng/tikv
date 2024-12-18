@@ -12,10 +12,10 @@ use protobuf::Message;
 use tikv_util::{
     box_err,
     codec::number::{NumberEncoder, MAX_VAR_U64_LEN},
-    debug, error,
+    debug, error, info,
     memory::HeapSize,
     time::{duration_to_sec, monotonic_raw_now},
-    MustConsumeVec, info,
+    MustConsumeVec,
 };
 use time::Timespec;
 use uuid::Uuid;
@@ -296,8 +296,8 @@ impl<C: ErrorCallback> ReadIndexQueue<C> {
         if min_changed_offset != usize::MAX {
             self.ready_cnt = cmp::max(self.ready_cnt, max_changed_offset + 1);
         }
-        // We should not try to fold these read_index request anymore, because it is
-        // not correct for follower read.
+        // We should not try to fold these read_index request anymore, because
+        // it is not correct for follower read.
         // if max_changed_offset > 0 {
         //     self.fold(min_changed_offset, max_changed_offset);
         // }

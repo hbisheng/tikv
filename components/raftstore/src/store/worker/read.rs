@@ -23,10 +23,10 @@ use kvproto::{
 use pd_client::BucketMeta;
 use tikv_util::{
     codec::number::decode_u64,
-    debug, error,
+    debug, error, info,
     lru::LruCache,
     store::find_peer_by_id,
-    time::{monotonic_raw_now, ThreadReadId}, info,
+    time::{monotonic_raw_now, ThreadReadId},
 };
 use time::Timespec;
 use tracker::GLOBAL_TRACKERS;

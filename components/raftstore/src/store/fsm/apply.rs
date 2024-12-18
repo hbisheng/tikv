@@ -1737,6 +1737,12 @@ where
         let request = req.get_admin_request();
         let cmd_type = request.get_cmd_type();
         if cmd_type != AdminCmdType::CompactLog && cmd_type != AdminCmdType::CommitMerge {
+            println!(
+                "***** [exec_admin_cmd] region_id: {}, peer_id: {}, command: {:?}",
+                self.region_id(),
+                self.id(),
+                request
+            );
             info!(
                 "execute admin command";
                 "region_id" => self.region_id(),
@@ -2682,6 +2688,12 @@ where
             .map(|req| req.get_split_key().to_vec())
             .collect();
 
+        println!(
+            "***** [exec_batch_split] split region, region_id: {}, peer_id: {}, derived: {:?}",
+            self.region_id(),
+            self.id(),
+            derived
+        );
         info!(
             "split region";
             "region_id" => self.region_id(),
@@ -2691,18 +2703,18 @@ where
         );
 
         let new_region_cnt = split_reqs.get_requests().len();
-        let new_version = derived.get_region_epoch().get_version() + new_region_cnt as u64;
-        derived.mut_region_epoch().set_version(new_version);
+        let new_version = derived.get_region_epoch().get_version() + new_region_cnt as u64; // 235 -> 245
+        derived.mut_region_epoch().set_version(new_version); // 245
 
-        let right_derive = split_reqs.get_right_derive();
+        let right_derive = split_reqs.get_right_derive(); // true
         let share_source_region_size = split_reqs.get_share_source_region_size();
-        let mut regions = Vec::with_capacity(new_region_cnt + 1);
+        let mut regions = Vec::with_capacity(new_region_cnt + 1); // 1 -> 11
         // Note that the split requests only contain ids for new regions, so we need
         // to handle new regions and old region separately.
         if right_derive {
             // So the range of new regions is [old_start_key, split_key1, ...,
             // last_split_key].
-            keys.push_front(derived.get_start_key().to_vec());
+            keys.push_front(derived.get_start_key().to_vec()); // old/derived region range will be [last_split_key, old_end_key]
         } else {
             // So the range of new regions is [split_key1, ..., last_split_key,
             // old_end_key].
@@ -2739,7 +2751,7 @@ where
 
         if right_derive {
             derived.set_start_key(keys.pop_front().unwrap());
-            regions.push(derived.clone());
+            regions.push(derived.clone()); // regions: all 11 regions.
         }
 
         // Generally, a peer is created in pending_create_peers when it is

@@ -3367,12 +3367,12 @@ fn prepare_snap_ctx<'a>(
 ) -> Result<SnapContext<'a>> {
     let keys_debug: Vec<_> = keys.clone().into_iter().collect();
     info!(
-        "jepsen prepare_snap_ctx"; 
-        "cmd" => ?cmd, 
-        "start_ts" => start_ts, 
+        "jepsen prepare_snap_ctx";
+        "cmd" => ?cmd,
+        "start_ts" => start_ts,
         "stale_read" => pb_ctx.get_stale_read(),
-        "isolation_level" => ?pb_ctx.get_isolation_level(), 
-        "bypass_locks" => ?bypass_locks, 
+        "isolation_level" => ?pb_ctx.get_isolation_level(),
+        "bypass_locks" => ?bypass_locks,
         "keys" => ?keys_debug
     );
     // Update max_ts and check the in-memory lock table before getting the snapshot

@@ -2062,6 +2062,13 @@ impl<'a, EK: KvEngine, ER: RaftEngine, T: Transport> StoreFsmDelegate<'a, EK, ER
         let region = local_state.get_region();
         let region_epoch = region.get_region_epoch();
         if local_state.has_merge_state() {
+            println!(
+                "Merged peer receives a stale message; region_id={}, current_region_epoch={:?}, msg_type={}",
+                region_id,
+                region_epoch,
+                util::MsgType(msg)
+            );
+
             info!(
                 "merged peer receives a stale message";
                 "region_id" => region_id,
@@ -2425,15 +2432,29 @@ impl<'a, EK: KvEngine, ER: RaftEngine, T: Transport> StoreFsmDelegate<'a, EK, ER
                 if !merge_to_this_peer {
                     regions_to_destroy.push(exist_region.get_id());
                 } else {
+                    // You kind of know 15822 is taking over 12695. You have that info in
+                    // pending_merge_target. But the message you are receiving
+                    // now is the latest state where 15822 has won everything.
+                    // In your world, 15822 hasn't existed. It's still a new peer.
+                    // That's why 15822, the new peer, has a merge target.
+                    println!(
+                        "A new peer has a merge source peer; region_id={}, peer_id={}, source_region={:?}",
+                        region_id,
+                        target.get_id(),
+                        exist_region
+                    );
                     error!(
                         "A new peer has a merge source peer";
-                        "region_id" => region_id,
-                        "peer_id" => target.get_id(),
-                        "source_region" => ?exist_region,
+                        "region_id" => region_id, // region_id=15822
+                        "peer_id" => target.get_id(), // peer_id=15824
+                        "source_region" => ?exist_region, // id: 12695, region_epoch { conf_ver: 17 version: 235 }
                     );
                     if self.ctx.cfg.dev_assert {
                         panic!(
-                            "something is wrong, maybe PD do not ensure all target peers exist before merging"
+                            "something is wrong, maybe PD do not ensure all target peers exist before merging" /* Yeah, indeed, when this node knows about the
+                                                                                                                * (12695->15822) merge operation, 15822 hasn't
+                                                                                                                * existed yet. Because 15822 needs to be created
+                                                                                                                * from a split. That split hasn't complete yet. */
                         );
                     }
                 }

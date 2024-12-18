@@ -775,6 +775,7 @@ mod tests {
                 Default::default(),
                 Default::default(),
                 false,
+                false,
             )
         }
     }
@@ -1017,6 +1018,7 @@ mod tests {
             Default::default(),
             Default::default(),
             false,
+            false,
         );
         let bound_a = Key::from_encoded(b"a".to_vec());
         let bound_b = Key::from_encoded(b"b".to_vec());
@@ -1069,6 +1071,7 @@ mod tests {
             true,
             Default::default(),
             Default::default(),
+            false,
             false,
         );
         store2.scanner(false, false, false, None, None).unwrap();

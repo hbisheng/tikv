@@ -358,6 +358,7 @@ impl TestSuite {
             Default::default(),
             Default::default(),
             false,
+            true,
         );
         let mut scanner = RangesScanner::<_, ApiV1>::new(RangesScannerOptions {
             storage: TikvStorage::new(snap_store, false),

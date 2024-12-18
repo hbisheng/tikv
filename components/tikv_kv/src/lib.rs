@@ -559,7 +559,9 @@ pub trait SnapshotExt {
 pub struct DummySnapshotExt;
 
 impl SnapshotExt for DummySnapshotExt {
-    fn get_applied_index(&self) -> u64 {0}
+    fn get_applied_index(&self) -> u64 {
+        0
+    }
 }
 
 pub trait Iterator: Send + MetricsExt {
