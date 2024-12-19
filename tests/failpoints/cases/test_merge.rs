@@ -2319,7 +2319,7 @@ fn test_node_merge_split_race() {
     // 4. Peer 1003 receives the snapshot and perform the snapshot check.
     
     // Need to wait for the merged region reply a GC message. 
-    sleep_ms(100);
+    sleep_ms(1000);
     fail::remove("apply_before_split_1_3");
 
     // How to ensure it reaches the next failpoint `apply_after_split_1_3`? And
