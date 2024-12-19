@@ -3486,11 +3486,6 @@ where
         let snap_enc_start_key = enc_start_key(&snap_region);
         let snap_enc_end_key = enc_end_key(&snap_region);
 
-        fail_point!(
-            "before_check_snapshot_1000_3",
-            self.fsm.region_id() == 1000 && self.store_id() == 3,
-            |_| { unreachable!() }
-        );
         let before_check_snapshot_1_2_fp = || -> bool {
             fail_point!(
                 "before_check_snapshot_1_2",
