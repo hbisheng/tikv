@@ -599,12 +599,11 @@ impl FromStr for ReadableSchedule {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        Ok(ReadableSchedule(
-            parse_string_to_vec(s)?
-                .into_iter()
-                .map(|s| ReadableOffsetTime::from_str(s.as_str()))
-                .try_collect()?,
-        ))
+        let times: Vec<ReadableOffsetTime> = parse_string_to_vec(s)?
+            .into_iter()
+            .map(|s| ReadableOffsetTime::from_str(s.as_str()))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ReadableSchedule(times))
     }
 }
 

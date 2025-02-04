@@ -1,12 +1,6 @@
 // Copyright 2016 TiKV Project Authors. Licensed under Apache-2.0.
 
 #![cfg_attr(test, feature(test))]
-#![feature(thread_id_value)]
-#![feature(box_patterns)]
-#![feature(vec_into_raw_parts)]
-#![feature(let_chains)]
-#![feature(iterator_try_collect)]
-
 #[cfg(test)]
 extern crate test;
 
