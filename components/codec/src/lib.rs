@@ -2,8 +2,6 @@
 
 #![cfg_attr(test, feature(test))]
 #![allow(internal_features)]
-#![feature(core_intrinsics)]
-#![feature(min_specialization)]
 
 #[cfg(test)]
 extern crate test;

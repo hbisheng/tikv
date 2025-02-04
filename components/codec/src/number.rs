@@ -1,7 +1,5 @@
 // Copyright 2018 TiKV Project Authors. Licensed under Apache-2.0.
 
-use std::intrinsics::{likely, unlikely};
-
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
 use crate::{
@@ -445,7 +443,7 @@ impl NumberCodec {
             let mut ptr = buf.as_ptr();
             let len = buf.len();
             let mut val = 0u64;
-            if likely(len >= MAX_VARINT64_LENGTH) {
+            if len >= MAX_VARINT64_LENGTH {
                 // Fast path
                 let mut b: u64;
                 let mut shift = 0;
@@ -471,7 +469,7 @@ impl NumberCodec {
                     shift += 7;
                     ptr = ptr.add(1);
                 }
-                if unlikely(ptr == ptr_end) {
+                if ptr == ptr_end {
                     return Err(ErrorInner::eof().into());
                 }
                 val |= (*ptr as u64) << shift;
@@ -492,7 +490,7 @@ impl NumberCodec {
     #[inline]
     pub fn encode_var_i64(buf: &mut [u8], v: i64) -> usize {
         let mut uv = (v as u64) << 1;
-        if unlikely(v < 0) {
+        if v < 0 {
             uv = !uv;
         }
         Self::encode_var_u64(buf, uv)
@@ -513,7 +511,7 @@ impl NumberCodec {
         let (uv, decoded_bytes) = Self::try_decode_var_u64(buf)?;
         let v = uv >> 1;
         if uv & 1 == 0 {
-            // no need for likely/unlikely here
+            // no need for / here
             Ok((v as i64, decoded_bytes))
         } else {
             Ok((!v as i64, decoded_bytes))
@@ -528,7 +526,7 @@ impl NumberCodec {
         unsafe {
             let mut ptr = buf.as_ptr();
             let len = buf.len();
-            if likely(len >= MAX_VARINT64_LENGTH) {
+            if len >= MAX_VARINT64_LENGTH {
                 // Fast path
                 // Compiler will do loop unrolling for us.
                 for i in 1..=9 {
@@ -549,7 +547,7 @@ impl NumberCodec {
                 //      but meet EOF, so only `len` is returned.
                 // For `*ptr < 0x80` case, it means currently it is pointing to the last byte
                 //      of the VarInt, so we return `delta + 1` as length.
-                if unlikely(ptr == ptr_end) {
+                if ptr == ptr_end {
                     return len;
                 }
                 ptr.offset_from(buf.as_ptr()) as usize + 1
@@ -562,7 +560,7 @@ macro_rules! read {
     ($s:expr, $size:expr, $f:ident) => {{
         let ret = {
             let buf = $s.bytes();
-            if unlikely(buf.len() < $size) {
+            if buf.len() < $size {
                 return Err(ErrorInner::eof().into());
             }
             NumberCodec::$f(buf)
@@ -806,7 +804,7 @@ macro_rules! write {
     ($s:expr, $v:expr, $size:expr, $f:ident) => {{
         {
             let buf = unsafe { $s.bytes_mut($size) };
-            if unlikely(buf.len() < $size) {
+            if buf.len() < $size {
                 return Err(ErrorInner::eof().into());
             }
             NumberCodec::$f(buf, $v);
@@ -1039,7 +1037,7 @@ pub trait NumberEncoder: BufferWriter {
     fn write_var_u64(&mut self, v: u64) -> Result<usize> {
         let encoded_bytes = {
             let buf = unsafe { self.bytes_mut(MAX_VARINT64_LENGTH) };
-            if unlikely(buf.len() < MAX_VARINT64_LENGTH) {
+            if buf.len() < MAX_VARINT64_LENGTH {
                 return Err(ErrorInner::eof().into());
             }
             NumberCodec::encode_var_u64(buf, v)
@@ -1065,7 +1063,7 @@ pub trait NumberEncoder: BufferWriter {
     fn write_var_i64(&mut self, v: i64) -> Result<usize> {
         let encoded_bytes = {
             let buf = unsafe { self.bytes_mut(MAX_VARINT64_LENGTH) };
-            if unlikely(buf.len() < MAX_VARINT64_LENGTH) {
+            if buf.len() < MAX_VARINT64_LENGTH {
                 return Err(ErrorInner::eof().into());
             }
             NumberCodec::encode_var_i64(buf, v)

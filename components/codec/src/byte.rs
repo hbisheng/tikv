@@ -1,6 +1,6 @@
 // Copyright 2018 TiKV Project Authors. Licensed under Apache-2.0.
 
-use std::{intrinsics::unlikely, io::Read};
+use std::io::Read;
 
 use crate::{
     buffer::BufferReader,
@@ -28,11 +28,11 @@ impl MemComparableByteCodec {
     fn get_first_encoded_len_internal<T: MemComparableCodecHelper>(encoded: &[u8]) -> usize {
         let mut idx = MEMCMP_GROUP_SIZE;
         loop {
-            if unlikely(encoded.len() < idx + 1) {
+            if encoded.len() < idx + 1 {
                 return encoded.len();
             }
             let marker = encoded[idx];
-            if unlikely(T::parse_padding_size(marker) > 0) {
+            if T::parse_padding_size(marker) > 0 {
                 return idx + 1;
             }
             idx += MEMCMP_GROUP_SIZE + 1
@@ -363,7 +363,7 @@ impl MemComparableByteCodec {
 
             loop {
                 let src_ptr_next = src_ptr.add(MEMCMP_GROUP_SIZE + 1);
-                if std::intrinsics::unlikely(src_ptr_next > src_ptr_end) {
+                if src_ptr_next > src_ptr_end {
                     return Err(ErrorInner::eof().into());
                 }
 
@@ -376,9 +376,9 @@ impl MemComparableByteCodec {
                 dest_ptr = dest_ptr.add(MEMCMP_GROUP_SIZE);
 
                 // If there is a padding, check whether or not it is correct.
-                if std::intrinsics::unlikely(padding_size > 0) {
+                if padding_size > 0 {
                     // First check padding size.
-                    if std::intrinsics::unlikely(padding_size > MEMCMP_GROUP_SIZE) {
+                    if padding_size > MEMCMP_GROUP_SIZE {
                         return Err(ErrorInner::bad_padding().into());
                     }
 
@@ -395,7 +395,7 @@ impl MemComparableByteCodec {
                         expected_padding_ptr as *const libc::c_void,
                         padding_size,
                     );
-                    if std::intrinsics::unlikely(cmp_result != 0) {
+                    if cmp_result != 0 {
                         return Err(ErrorInner::bad_padding().into());
                     }
 
@@ -449,7 +449,7 @@ pub trait MemComparableByteEncoder: NumberEncoder {
     fn write_comparable_bytes(&mut self, bs: &[u8]) -> Result<()> {
         let len = MemComparableByteCodec::encoded_len(bs.len());
         let buf = unsafe { self.bytes_mut(len) };
-        if unlikely(buf.len() < len) {
+        if buf.len() < len {
             return Err(ErrorInner::eof().into());
         }
         MemComparableByteCodec::encode_all(bs, buf);
@@ -467,7 +467,7 @@ pub trait MemComparableByteEncoder: NumberEncoder {
     fn write_comparable_bytes_desc(&mut self, bs: &[u8]) -> Result<()> {
         let len = MemComparableByteCodec::encoded_len(bs.len());
         let buf = unsafe { self.bytes_mut(len) };
-        if unlikely(buf.len() < len) {
+        if buf.len() < len {
             return Err(ErrorInner::eof().into());
         }
         MemComparableByteCodec::encode_all_desc(bs, buf);
@@ -546,7 +546,7 @@ impl<T: NumberDecoder> CompactByteDecoder for T {
     fn read_compact_bytes(&mut self) -> Result<Vec<u8>> {
         let vn = self.read_var_i64()? as usize;
         let data = self.bytes();
-        if unlikely(data.len() < vn) {
+        if data.len() < vn {
             return Err(ErrorInner::eof().into());
         }
         let bs = data[0..vn].to_vec();

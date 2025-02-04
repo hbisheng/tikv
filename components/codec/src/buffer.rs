@@ -1,7 +1,5 @@
 // Copyright 2018 TiKV Project Authors. Licensed under Apache-2.0.
 
-use std::intrinsics::unlikely;
-
 use crate::{ErrorInner, Result};
 
 /// A trait to provide sequential read over a memory buffer.
@@ -50,13 +48,13 @@ impl<T: AsRef<[u8]>> BufferReader for std::io::Cursor<T> {
 
     fn read_bytes(&mut self, count: usize) -> Result<&[u8]> {
         // We should not throw error at any time if `count == 0`.
-        if unlikely(count == 0) {
+        if count == 0 {
             return Ok(&[]);
         }
 
         let pos = self.position() as usize;
         let slice = self.get_ref().as_ref();
-        if unlikely(pos + count >= slice.len()) {
+        if pos + count >= slice.len() {
             return Err(ErrorInner::eof().into());
         }
         let new_pos = pos + count;
@@ -77,7 +75,7 @@ impl<'a> BufferReader for &'a [u8] {
     }
 
     fn read_bytes(&mut self, count: usize) -> Result<&[u8]> {
-        if unlikely(self.len() < count) {
+        if self.len() < count {
             return Err(ErrorInner::eof().into());
         }
         let (left, right) = self.split_at(count);
@@ -188,13 +186,13 @@ impl<T: AsMut<[u8]>> BufferWriter for std::io::Cursor<T> {
         let write_len = values.len();
 
         // We should not throw error at any time if there is no byte to write.
-        if unlikely(write_len == 0) {
+        if write_len == 0 {
             return Ok(());
         }
 
         let pos = self.position() as usize;
         let slice = self.get_mut().as_mut();
-        if unlikely(pos + write_len >= slice.len()) {
+        if pos + write_len >= slice.len() {
             return Err(ErrorInner::eof().into());
         }
         let new_pos = pos + write_len;
@@ -218,7 +216,7 @@ impl<'a> BufferWriter for &'a mut [u8] {
 
     fn write_bytes(&mut self, values: &[u8]) -> Result<()> {
         let write_len = values.len();
-        if unlikely(self.len() < write_len) {
+        if self.len() < write_len {
             return Err(ErrorInner::eof().into());
         }
         let original_self = std::mem::take(self);

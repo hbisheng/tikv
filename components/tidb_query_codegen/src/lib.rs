@@ -11,8 +11,6 @@
 //! coprocessor functionality. `rpn_fn` is documented in the
 //! [rpn_function](rpn_function.rs) module.
 
-#![feature(proc_macro_diagnostic)]
-#![feature(iter_order_by)]
 #![recursion_limit = "256"]
 
 mod aggr_function;

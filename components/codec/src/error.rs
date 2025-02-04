@@ -34,16 +34,16 @@ impl ErrorInner {
 #[error(transparent)]
 pub struct Error(#[from] pub Box<ErrorInner>);
 
-impl From<ErrorInner> for Error {
-    #[inline]
-    fn from(e: ErrorInner) -> Self {
-        Error(Box::new(e))
-    }
-}
+// impl From<ErrorInner> for Error {
+//     #[inline]
+//     fn from(e: ErrorInner) -> Self {
+//         Error(Box::new(e))
+//     }
+// }
 
 impl<T: Into<ErrorInner>> From<T> for Error {
     #[inline]
-    default fn from(err: T) -> Self {
+    fn from(err: T) -> Self {
         let err = err.into();
         err.into()
     }
