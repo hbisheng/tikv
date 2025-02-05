@@ -3,8 +3,7 @@
 #![cfg_attr(test, feature(test))]
 #![feature(cell_update)]
 #![feature(box_patterns)]
-#![feature(hash_extract_if)]
-#![feature(let_chains)]
+
 #![feature(assert_matches)]
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]

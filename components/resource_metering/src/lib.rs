@@ -3,10 +3,8 @@
 // TODO(mornyx): crate doc.
 
 #![allow(internal_features)]
-#![feature(core_intrinsics)]
 
 use std::{
-    intrinsics::unlikely,
     pin::Pin,
     sync::{
         atomic::Ordering::{Relaxed, SeqCst},
@@ -76,7 +74,7 @@ impl ResourceMeteringTag {
         STORAGE.with(move |s| {
             let mut ls = s.borrow_mut();
 
-            if unlikely(!ls.registered && ls.register_failed_times < MAX_THREAD_REGISTER_RETRY) {
+            if !ls.registered && ls.register_failed_times < MAX_THREAD_REGISTER_RETRY {
                 ls.registered = self.resource_tag_factory.register_local_storage(&ls);
                 if !ls.registered {
                     ls.register_failed_times += 1;

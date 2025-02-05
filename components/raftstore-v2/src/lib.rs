@@ -21,7 +21,7 @@
 // Functionalities like read, write, etc should be implemented in [`operation`]
 // using a standalone modules.
 
-#![feature(let_chains)]
+
 #![feature(array_windows)]
 #![feature(div_duration)]
 #![feature(box_into_inner)]

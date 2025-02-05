@@ -16,7 +16,7 @@
 //! Please read the engine_trait crate docs before hacking.
 
 #![cfg_attr(test, feature(test))]
-#![feature(let_chains)]
+
 #![feature(option_get_or_insert_default)]
 #![feature(path_file_prefix)]
 

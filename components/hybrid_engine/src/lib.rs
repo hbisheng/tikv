@@ -3,7 +3,7 @@
 // `HybridEngineSnapshot` and `HybridEngineIterator` into in_memory_engine
 // crate.
 
-#![feature(let_chains)]
+
 
 mod db_vector;
 mod engine;
