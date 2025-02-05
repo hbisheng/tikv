@@ -1,7 +1,5 @@
 // Copyright 2018 TiKV Project Authors. Licensed under Apache-2.0.
 
-#![feature(min_specialization)]
-
 mod hash_aggr;
 mod index_scan;
 mod integrated;

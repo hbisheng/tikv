@@ -1,8 +1,5 @@
 // Copyright 2019 TiKV Project Authors. Licensed under Apache-2.0.
 
-#![feature(box_patterns)]
-#![feature(min_specialization)]
-
 #[allow(unused_extern_crates)]
 extern crate tikv_alloc;
 
@@ -88,16 +85,17 @@ impl Error {
     }
 }
 
-impl From<ErrorInner> for Error {
-    #[inline]
-    fn from(e: ErrorInner) -> Self {
-        Error(Box::new(e))
-    }
-}
+// impl From<ErrorInner> for Error {
+//     #[inline]
+//     fn from(e: ErrorInner) -> Self {
+//         Error(Box::new(e))
+//     }
+// }
 
 impl<T: Into<ErrorInner>> From<T> for Error {
     #[inline]
-    default fn from(err: T) -> Self {
+    // default fn from(err: T) -> Self {
+    fn from(err: T) -> Self {
         let err = err.into();
         err.into()
     }
