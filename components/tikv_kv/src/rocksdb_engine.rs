@@ -249,7 +249,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
         Ok(())
     }
 
-    type WriteRes = impl Stream<Item = crate::WriteEvent> + Send + 'static;
+    type WriteRes = Box<dyn Stream<Item = crate::WriteEvent> + Send + 'static>;
     fn async_write(
         &self,
         _ctx: &Context,
@@ -283,17 +283,17 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
             Ok(())
         })();
         let mut res = Some(res);
-        stream::poll_fn(move |cx| {
+        Box::new(stream::poll_fn(move |cx| {
             if res.as_ref().map_or(false, |r| r.is_err()) {
                 return Poll::Ready(res.take().map(WriteEvent::Finished));
             }
             // If it's none, it means an error is returned, it should not be polled again.
             assert!(res.is_some());
             Pin::new(&mut rx).poll_next(cx)
-        })
+        }))
     }
 
-    type SnapshotRes = impl Future<Output = Result<Self::Snap>> + Send;
+    type SnapshotRes = Box<dyn Future<Output = Result<Self::Snap>> + Send>;
     fn async_snapshot(&mut self, _: SnapContext<'_>) -> Self::SnapshotRes {
         let res = (|| {
             fail_point!("rockskv_async_snapshot", |_| Err(box_err!(
@@ -309,7 +309,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
             Ok(rx)
         })();
 
-        async move { Ok(res?.await.unwrap()) }
+        Box::new(async move { Ok(res?.await.unwrap()) })
     }
 
     type IMSnap = Self::Snap;

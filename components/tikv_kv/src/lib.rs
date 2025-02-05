@@ -345,7 +345,7 @@ pub trait Engine: Send + Clone + 'static {
     /// Currently, only multi-rocksdb version will return `None`.
     fn kv_engine(&self) -> Option<Self::Local>;
 
-    type RaftExtension: raft_extension::RaftExtension = FakeExtension;
+    type RaftExtension: raft_extension::RaftExtension;
     /// Get the underlying raft extension.
     fn raft_extension(&self) -> Self::RaftExtension {
         unimplemented!()
@@ -625,16 +625,16 @@ impl Error {
     }
 }
 
-impl From<ErrorInner> for Error {
-    #[inline]
-    fn from(e: ErrorInner) -> Self {
-        Error(Box::new(e))
-    }
-}
+// impl From<ErrorInner> for Error {
+//     #[inline]
+//     fn from(e: ErrorInner) -> Self {
+//         Error(Box::new(e))
+//     }
+// }
 
 impl<T: Into<ErrorInner>> From<T> for Error {
     #[inline]
-    default fn from(err: T) -> Self {
+    fn from(err: T) -> Self {
         let err = err.into();
         err.into()
     }

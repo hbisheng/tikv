@@ -23,8 +23,7 @@ use txn_types::{Key, Value};
 
 use super::SnapContext;
 use crate::{
-    DummySnapshotExt, Engine, Error as EngineError, ErrorInner as EngineErrorInner, Iterator,
-    Modify, OnAppliedCb, Result as EngineResult, Snapshot, WriteData, WriteEvent,
+    DummySnapshotExt, Engine, Error as EngineError, ErrorInner as EngineErrorInner, FakeExtension, Iterator, Modify, OnAppliedCb, Result as EngineResult, Snapshot, WriteData, WriteEvent
 };
 
 type RwLockTree = RwLock<BTreeMap<Key, Value>>;
@@ -79,6 +78,7 @@ impl Default for BTreeEngine {
 }
 
 impl Engine for BTreeEngine {
+    type RaftExtension = FakeExtension;
     type Snap = BTreeEngineSnapshot;
     type Local = PanicEngine;
 
@@ -90,7 +90,7 @@ impl Engine for BTreeEngine {
         unimplemented!();
     }
 
-    type WriteRes = impl Stream<Item = WriteEvent> + Send;
+    type WriteRes = Box<dyn Stream<Item = WriteEvent> + Send>;
     fn async_write(
         &self,
         _ctx: &Context,
@@ -104,14 +104,14 @@ impl Engine for BTreeEngine {
             write_modifies(self, batch.modifies)
         };
 
-        stream::once(future::ready(WriteEvent::Finished(res)))
+        Box::new(stream::once(future::ready(WriteEvent::Finished(res))))
     }
 
-    type SnapshotRes = impl Future<Output = EngineResult<Self::Snap>> + Send;
+    type SnapshotRes = Box<dyn Future<Output = EngineResult<Self::Snap>> + Send>;
     /// warning: It returns a fake snapshot whose content will be affected by
     /// the later modifies!
     fn async_snapshot(&mut self, _ctx: SnapContext<'_>) -> Self::SnapshotRes {
-        futures::future::ready(Ok(BTreeEngineSnapshot::new(self)))
+        Box::new(futures::future::ready(Ok(BTreeEngineSnapshot::new(self))))
     }
 
     type IMSnap = Self::Snap;
