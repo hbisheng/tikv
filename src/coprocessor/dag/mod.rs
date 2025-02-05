@@ -1,7 +1,7 @@
 // Copyright 2019 TiKV Project Authors. Licensed under Apache-2.0.
 
 mod storage_impl;
-
+use tidb_query_common::error::StorageError;
 use std::{marker::PhantomData, sync::Arc};
 
 use api_version::KvFormat;
@@ -133,9 +133,7 @@ fn handle_qe_response(
 
     use crate::coprocessor::Error;
 
-    let result: tidb_query_common::Result<(SelectResponse, Option<IntervalRange>)> =
-        Err(tidb_query_common::Error::from(ErrorInner::Storage(StorageError::new("error".to_string()))));
-
+    let result = Ok((SelectResponse::default(), None::<T>));
     match result {
         Ok((sel_resp, range)) => {
             let mut resp = Response::default();

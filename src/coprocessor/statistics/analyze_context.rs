@@ -90,7 +90,7 @@ impl<S: Snapshot, F: KvFormat> AnalyzeContext<S, F> {
     // handle_column is used to process `AnalyzeColumnsReq`
     // it would build a histogram for the primary key(if needed) and
     // collectors for each column value.
-    async fn handle_column(builder: &mut SampleBuilder<S, F>) -> Result<Vec<u8>> {
+    async fn handle_column(builder: &mut SampleBuilder) -> Result<Vec<u8>> {
         // let (col_res, _) = builder.collect_columns_stats().await?;
 
         // let res_data = {
@@ -104,7 +104,7 @@ impl<S: Snapshot, F: KvFormat> AnalyzeContext<S, F> {
     // Handle mixed request, it would build histograms for common handle and columns
     // by scan table rows once.
     // NOTE: Mixed requests are only sent when the statistics version is set to 1.
-    async fn handle_mixed(builder: &mut SampleBuilder<S, F>) -> Result<Vec<u8>> {
+    async fn handle_mixed(builder: &mut SampleBuilder) -> Result<Vec<u8>> {
         // let (col_res, idx_res) = builder.collect_columns_stats().await?;
 
         // let res_data = {
@@ -121,7 +121,7 @@ impl<S: Snapshot, F: KvFormat> AnalyzeContext<S, F> {
         Ok(Vec::new())
     }
 
-    async fn handle_full_sampling(builder: &mut RowSampleBuilder<S, F>) -> Result<Vec<u8>> {
+    async fn handle_full_sampling(builder: &mut RowSampleBuilder) -> Result<Vec<u8>> {
         // let sample_res = builder.collect_column_stats().await?;
         // let res_data = {
         //     let res: tipb::AnalyzeColumnsResp = sample_res.into();

@@ -42,7 +42,7 @@ pub(crate) struct RowSampleBuilder {
     is_auto_analyze: bool,
 }
 
-impl<S: Snapshot, F: KvFormat> RowSampleBuilder<S, F> {
+impl RowSampleBuilder {
     pub(crate) fn new(
         mut req: AnalyzeColumnsReq,
         storage: TikvStorage<SnapshotStore<S>>,
@@ -92,106 +92,106 @@ impl<S: Snapshot, F: KvFormat> RowSampleBuilder<S, F> {
         ))
     }
 
-    pub(crate) async fn collect_column_stats(&mut self) -> Result<AnalyzeSamplingResult> {
-        use tidb_query_datatype::{codec::collation::Collator, match_template_collator};
+    // pub(crate) async fn collect_column_stats(&mut self) -> Result<AnalyzeSamplingResult> {
+    //     use tidb_query_datatype::{codec::collation::Collator, match_template_collator};
 
-        let mut is_drained = false;
-        let mut collector = self.new_collector();
-        let mut ctx = EvalContext::default();
-        while !is_drained {
-            let mut sample = self.quota_limiter.new_sample(!self.is_auto_analyze);
-            let mut read_size: usize = 0;
-            {
-                let result = {
-                    let (duration, res) = sample
-                        .observe_cpu_async(self.data.next_batch(BATCH_MAX_SIZE))
-                        .await;
-                    sample.add_cpu_time(duration);
-                    res
-                };
-                let _guard = sample.observe_cpu();
-                is_drained = result.is_drained?.stop();
+    //     let mut is_drained = false;
+    //     let mut collector = self.new_collector();
+    //     let mut ctx = EvalContext::default();
+    //     while !is_drained {
+    //         let mut sample = self.quota_limiter.new_sample(!self.is_auto_analyze);
+    //         let mut read_size: usize = 0;
+    //         {
+    //             let result = {
+    //                 let (duration, res) = sample
+    //                     .observe_cpu_async(self.data.next_batch(BATCH_MAX_SIZE))
+    //                     .await;
+    //                 sample.add_cpu_time(duration);
+    //                 res
+    //             };
+    //             let _guard = sample.observe_cpu();
+    //             is_drained = result.is_drained?.stop();
 
-                let columns_slice = result.physical_columns.as_slice();
-                let mut column_vals: Vec<Vec<u8>> = vec![vec![]; self.columns_info.len()];
-                let mut collation_key_vals: Vec<Vec<u8>> = vec![vec![]; self.columns_info.len()];
-                for logical_row in &result.logical_rows {
-                    for i in 0..self.columns_info.len() {
-                        column_vals[i].clear();
-                        collation_key_vals[i].clear();
-                        columns_slice[i].encode(
-                            *logical_row,
-                            &self.columns_info[i],
-                            &mut ctx,
-                            &mut column_vals[i],
-                        )?;
-                        if self.columns_info[i].as_accessor().is_string_like() {
-                            match_template_collator! {
-                                TT, match self.columns_info[i].as_accessor().collation()? {
-                                    Collation::TT => {
-                                        let mut mut_val = &column_vals[i][..];
-                                        let decoded_val = table::decode_col_value(&mut mut_val, &mut ctx, &self.columns_info[i])?;
-                                        if decoded_val == Datum::Null {
-                                            collation_key_vals[i].clone_from(&column_vals[i]);
-                                        } else {
-                                            // Only if the `decoded_val` is Datum::Null, `decoded_val` is a Ok(None).
-                                            // So it is safe the unwrap the Ok value.
-                                            TT::write_sort_key(&mut collation_key_vals[i], &decoded_val.as_string()?.unwrap())?;
-                                        }
-                                    }
-                                }
-                            };
-                        }
-                        read_size += column_vals[i].len();
-                    }
-                    collector.mut_base().count += 1;
-                    collector.collect_column_group(
-                        &column_vals,
-                        &collation_key_vals,
-                        &self.columns_info,
-                        &self.column_groups,
-                    );
-                    collector.collect_column(&column_vals, &collation_key_vals, &self.columns_info);
-                }
-            }
+    //             let columns_slice = result.physical_columns.as_slice();
+    //             let mut column_vals: Vec<Vec<u8>> = vec![vec![]; self.columns_info.len()];
+    //             let mut collation_key_vals: Vec<Vec<u8>> = vec![vec![]; self.columns_info.len()];
+    //             for logical_row in &result.logical_rows {
+    //                 for i in 0..self.columns_info.len() {
+    //                     column_vals[i].clear();
+    //                     collation_key_vals[i].clear();
+    //                     columns_slice[i].encode(
+    //                         *logical_row,
+    //                         &self.columns_info[i],
+    //                         &mut ctx,
+    //                         &mut column_vals[i],
+    //                     )?;
+    //                     if self.columns_info[i].as_accessor().is_string_like() {
+    //                         match_template_collator! {
+    //                             TT, match self.columns_info[i].as_accessor().collation()? {
+    //                                 Collation::TT => {
+    //                                     let mut mut_val = &column_vals[i][..];
+    //                                     let decoded_val = table::decode_col_value(&mut mut_val, &mut ctx, &self.columns_info[i])?;
+    //                                     if decoded_val == Datum::Null {
+    //                                         collation_key_vals[i].clone_from(&column_vals[i]);
+    //                                     } else {
+    //                                         // Only if the `decoded_val` is Datum::Null, `decoded_val` is a Ok(None).
+    //                                         // So it is safe the unwrap the Ok value.
+    //                                         TT::write_sort_key(&mut collation_key_vals[i], &decoded_val.as_string()?.unwrap())?;
+    //                                     }
+    //                                 }
+    //                             }
+    //                         };
+    //                     }
+    //                     read_size += column_vals[i].len();
+    //                 }
+    //                 collector.mut_base().count += 1;
+    //                 collector.collect_column_group(
+    //                     &column_vals,
+    //                     &collation_key_vals,
+    //                     &self.columns_info,
+    //                     &self.column_groups,
+    //                 );
+    //                 collector.collect_column(&column_vals, &collation_key_vals, &self.columns_info);
+    //             }
+    //         }
 
-            sample.add_read_bytes(read_size);
-            // Don't let analyze bandwidth limit the quota limiter, this is already limited
-            // in rate limiter.
-            let quota_delay = {
-                if !self.is_auto_analyze {
-                    self.quota_limiter.consume_sample(sample, true).await
-                } else {
-                    self.quota_limiter.consume_sample(sample, false).await
-                }
-            };
+    //         sample.add_read_bytes(read_size);
+    //         // Don't let analyze bandwidth limit the quota limiter, this is already limited
+    //         // in rate limiter.
+    //         let quota_delay = {
+    //             if !self.is_auto_analyze {
+    //                 self.quota_limiter.consume_sample(sample, true).await
+    //             } else {
+    //                 self.quota_limiter.consume_sample(sample, false).await
+    //             }
+    //         };
 
-            if !quota_delay.is_zero() {
-                NON_TXN_COMMAND_THROTTLE_TIME_COUNTER_VEC_STATIC
-                    .get(ThrottleType::analyze_full_sampling)
-                    .inc_by(quota_delay.as_micros() as u64);
-            }
-        }
-        for i in 0..self.column_groups.len() {
-            let offsets = self.column_groups[i].get_column_offsets();
-            if offsets.len() != 1 {
-                continue;
-            }
-            // For the single-column group, its fm_sketch is the same as that of the
-            // corresponding column. Hence, we don't maintain its fm_sketch in
-            // collect_column_group. We just copy the corresponding column's fm_sketch after
-            // iterating all rows. Also, we can directly copy total_size and null_count.
-            let col_pos = offsets[0] as usize;
-            let col_group_pos = self.columns_info.len() + i;
-            collector.mut_base().fm_sketches[col_group_pos] =
-                collector.mut_base().fm_sketches[col_pos].clone();
-            collector.mut_base().null_count[col_group_pos] =
-                collector.mut_base().null_count[col_pos];
-            collector.mut_base().total_sizes[col_group_pos] =
-                collector.mut_base().total_sizes[col_pos];
-        }
-        Ok(AnalyzeSamplingResult::new(collector))
-    }
+    //         if !quota_delay.is_zero() {
+    //             NON_TXN_COMMAND_THROTTLE_TIME_COUNTER_VEC_STATIC
+    //                 .get(ThrottleType::analyze_full_sampling)
+    //                 .inc_by(quota_delay.as_micros() as u64);
+    //         }
+    //     }
+    //     for i in 0..self.column_groups.len() {
+    //         let offsets = self.column_groups[i].get_column_offsets();
+    //         if offsets.len() != 1 {
+    //             continue;
+    //         }
+    //         // For the single-column group, its fm_sketch is the same as that of the
+    //         // corresponding column. Hence, we don't maintain its fm_sketch in
+    //         // collect_column_group. We just copy the corresponding column's fm_sketch after
+    //         // iterating all rows. Also, we can directly copy total_size and null_count.
+    //         let col_pos = offsets[0] as usize;
+    //         let col_group_pos = self.columns_info.len() + i;
+    //         collector.mut_base().fm_sketches[col_group_pos] =
+    //             collector.mut_base().fm_sketches[col_pos].clone();
+    //         collector.mut_base().null_count[col_group_pos] =
+    //             collector.mut_base().null_count[col_pos];
+    //         collector.mut_base().total_sizes[col_group_pos] =
+    //             collector.mut_base().total_sizes[col_pos];
+    //     }
+    //     Ok(AnalyzeSamplingResult::new(collector))
+    // }
 }
 
 trait RowSampleCollector: Send {
@@ -542,7 +542,7 @@ pub(crate) struct SampleBuilder {
 /// `SampleBuilder` is used to analyze columns. It collects sample from
 /// the result set using Reservoir Sampling algorithm, estimates NDVs
 /// using FM Sketch during the collecting process, and builds count-min sketch.
-impl<S: Snapshot, F: KvFormat> SampleBuilder<S, F> {
+impl SampleBuilder {
     pub(crate) fn new(
         mut req: AnalyzeColumnsReq,
         common_handle_req: Option<tipb::AnalyzeIndexReq>,

@@ -2123,8 +2123,18 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
     fn dispatch(&mut self, change: ConfigChange) -> Result<(), Box<dyn Error>> {
         self.cfg.update(change.clone())?;
         let change_str = format!("{:?}", change);
-        let mut change: Vec<(String, ConfigValue)> = change.into_iter().collect();
-        let cf_config = change.extract_if(|(name, _)| name.ends_with("cf"));
+
+        // Separate CF-specific config changes.
+        let mut cf_config = Vec::new();
+        change.retain(|name, cf_change| {
+            if name.ends_with("cf") {
+                cf_config.push((name.clone(), cf_change.clone()));
+                false // Remove it from `change` after adding to `cf_config`
+            } else {
+                true // Keep it in `change`
+            }
+        });
+
         for (cf_name, cf_change) in cf_config {
             if let ConfigValue::Module(mut cf_change) = cf_change {
                 // defaultcf -> default
@@ -2157,66 +2167,83 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
             }
         }
 
+        // Extract and apply the rate bytes per second setting.
         if let Some(rate_bytes_config) = change
-            .extract_if(|(name, _)| name == "rate_bytes_per_sec")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "rate_bytes_per_sec")
         {
-            let rate_bytes_per_sec: ReadableSize = rate_bytes_config.1.into();
-            self.db
-                .set_rate_bytes_per_sec(rate_bytes_per_sec.0 as i64)?;
+            let rate_bytes_per_sec: ReadableSize = (*rate_bytes_config.1).into();
+            self.db.set_rate_bytes_per_sec(rate_bytes_per_sec.0 as i64)?;
+            change.retain(|name, _| *name != "rate_bytes_per_sec");
         }
 
+        // Extract and apply the rate limiter auto-tuned setting.
         if let Some(rate_bytes_config) = change
-            .extract_if(|(name, _)| name == "rate_limiter_auto_tuned")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "rate_limiter_auto_tuned")
+            
         {
-            let rate_limiter_auto_tuned: bool = rate_bytes_config.1.into();
-            self.db
-                .set_rate_limiter_auto_tuned(rate_limiter_auto_tuned)?;
+            let rate_limiter_auto_tuned: bool = (*rate_bytes_config.1).into();
+            self.db.set_rate_limiter_auto_tuned(rate_limiter_auto_tuned)?;
+            change.retain(|name, _| *name != "rate_limiter_auto_tuned");
         }
 
+        // Extract and apply the write buffer limit.
         if let Some(size) = change
-            .extract_if(|(name, _)| name == "write_buffer_limit")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "write_buffer_limit")
+            
         {
-            let size: ReadableSize = size.1.into();
+            let size: ReadableSize = (*size.1).into();
             self.db.set_flush_size(size.0 as usize)?;
+            change.retain(|name, _| *name != "write_buffer_limit");
         }
 
+       // Extract and apply the write buffer flush oldest first setting.
         if let Some(f) = change
-            .extract_if(|(name, _)| name == "write_buffer_flush_oldest_first")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "write_buffer_flush_oldest_first")
+            
         {
             self.db.set_flush_oldest_first(f.1.into())?;
+            change.retain(|name, _| *name != "write_buffer_flush_oldest_first");
         }
 
+        // Extract and apply the max background jobs setting.
         if let Some(background_jobs_config) = change
-            .extract_if(|(name, _)| name == "max_background_jobs")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "max_background_jobs")
+            
         {
             let max_background_jobs: i32 = background_jobs_config.1.into();
             self.update_background_cfg(max_background_jobs, self.cfg.max_background_flushes)?;
+            change.retain(|name, _| *name != "max_background_jobs");
         }
 
+        // Extract and apply the max subcompactions setting.
         if let Some(background_subcompactions_config) = change
-            .extract_if(|(name, _)| name == "max_sub_compactions")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "max_sub_compactions")
+            
         {
             let max_subcompactions: u32 = background_subcompactions_config.1.into();
-            self.db
-                .set_db_config(&[("max_subcompactions", &max_subcompactions.to_string())])?;
+            self.db.set_db_config(&[("max_subcompactions", &max_subcompactions.to_string())])?;
+            change.retain(|name, _| *name != "max_sub_compactions");
         }
 
+        // Extract and apply the max background flushes setting.
         if let Some(background_flushes_config) = change
-            .extract_if(|(name, _)| name == "max_background_flushes")
-            .next()
+            .iter()
+            .find(|(name, _)| *name == "max_background_flushes")
+            
         {
             let max_background_flushes: i32 = background_flushes_config.1.into();
             self.update_background_cfg(self.cfg.max_background_jobs, max_background_flushes)?;
+            change.retain(|name, _| *name != "max_background_flushes");
         }
 
         if !change.is_empty() {
-            let change = config_value_to_string(change);
+            let change = config_value_to_string(change.into_iter().collect());
             let change_slice = config_to_slice(&change);
             self.db.set_db_config(&change_slice)?;
         }

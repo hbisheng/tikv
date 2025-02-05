@@ -158,23 +158,6 @@ where
     );
 }
 
-impl<EK> CompactionFilterInitializer<EK> for Option<EK>
-where
-    EK: KvEngine,
-{
-    default fn init_compaction_filter(
-        &self,
-        _store_id: u64,
-        _safe_point: Arc<AtomicU64>,
-        _cfg_tracker: GcWorkerConfigManager,
-        _feature_gate: FeatureGate,
-        _gc_scheduler: Scheduler<GcTask<<EK as MiscExt>::DiskEngine>>,
-        _region_info_provider: Arc<dyn RegionInfoProvider>,
-    ) {
-        info!("Compaction filter is not supported for this engine.");
-    }
-}
-
 impl CompactionFilterInitializer<RocksEngine> for Option<RocksEngine> {
     fn init_compaction_filter(
         &self,
