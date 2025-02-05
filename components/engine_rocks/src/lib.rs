@@ -17,9 +17,6 @@
 
 #![cfg_attr(test, feature(test))]
 
-#![feature(option_get_or_insert_default)]
-#![feature(path_file_prefix)]
-
 #[allow(unused_extern_crates)]
 extern crate tikv_alloc;
 

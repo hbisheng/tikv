@@ -1103,12 +1103,13 @@ impl StatisticsReporter<RocksEngine> for RocksStatisticsReporter {
                         .with_label_values(&[&self.name, cf, &level.to_string()])
                         .set(num_files as i64);
                     if num_files > 0
-                        && let Some(ratio) = level_stats.weighted_compression_ratio
-                    {
-                        let normalized_compression_ratio = ratio / num_files as f64;
-                        STORE_ENGINE_COMPRESSION_RATIO_VEC
-                            .with_label_values(&[&self.name, cf, &level.to_string()])
-                            .set(normalized_compression_ratio);
+                    {   
+                        if let Some(ratio) = level_stats.weighted_compression_ratio {
+                            let normalized_compression_ratio = ratio / num_files as f64;
+                            STORE_ENGINE_COMPRESSION_RATIO_VEC
+                                .with_label_values(&[&self.name, cf, &level.to_string()])
+                                .set(normalized_compression_ratio);
+                        }
                     }
                 }
                 if let Some(v) = level_stats.num_blob_files {

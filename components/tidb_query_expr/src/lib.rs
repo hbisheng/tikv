@@ -10,7 +10,7 @@
 
 #![allow(elided_lifetimes_in_paths)] // Necessary until rpn_fn accepts functions annotated with lifetimes.
 #![allow(incomplete_features)]
-#![feature(proc_macro_hygiene)]
+
 #![feature(specialization)]
 
 #![feature(const_mut_refs)]

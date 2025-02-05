@@ -41,15 +41,26 @@ impl Charset for CharsetUtf8mb4 {
 
     #[inline]
     fn decode_one(data: &[u8]) -> Option<(Self::Char, usize)> {
-        let mut it = data.iter();
-        let start = it.as_slice().as_ptr();
-        unsafe {
-            core::str::next_code_point(&mut it).map(|c| {
-                (
-                    std::char::from_u32_unchecked(c),
-                    it.as_slice().as_ptr().offset_from(start) as usize,
-                )
+        // let mut it = data.iter();
+        // let start = it.as_slice().as_ptr();
+        // unsafe {
+        //     core::str::next_code_point(&mut it).map(|c| {
+        //         (
+        //             std::char::from_u32_unchecked(c),
+        //             it.as_slice().as_ptr().offset_from(start) as usize,
+        //         )
+        //     })
+        // }
+
+        // Try to decode the first character
+        if let Ok(decoded_str) = str::from_utf8(data) {
+            // Decode the first character
+            decoded_str.chars().next().map(|c| {
+                let len = decoded_str.len(); // The length of the UTF-8 sequence
+                (c, len)
             })
+        } else {
+            None
         }
     }
 

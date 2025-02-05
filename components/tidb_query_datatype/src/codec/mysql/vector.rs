@@ -317,11 +317,11 @@ impl std::fmt::Debug for VectorFloat32Ref<'_> {
     }
 }
 
-impl ToString for VectorFloat32Ref<'_> {
-    fn to_string(&self) -> String {
-        format!("{}", self)
-    }
-}
+// impl ToString for VectorFloat32Ref<'_> {
+//     fn to_string(&self) -> String {
+//         format!("{}", self)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

@@ -10,7 +10,6 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt::Write,
     hash::{Hash, Hasher},
-    intrinsics::unlikely,
 };
 
 use bitfield::bitfield;
@@ -1466,7 +1465,7 @@ impl Time {
     ) -> Result<Self> {
         let dur = chrono::Duration::nanoseconds(duration.to_nanos());
 
-        let time = if unlikely(ctx.cfg.is_test) {
+        let time = if ctx.cfg.is_test {
             Utc.ymd(2020, 2, 2).and_hms(0, 0, 0).checked_add_signed(dur)
         } else {
             Utc::today().and_hms(0, 0, 0).checked_add_signed(dur)

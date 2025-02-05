@@ -1,6 +1,6 @@
 // Copyright 2016 TiKV Project Authors. Licensed under Apache-2.0.
 
-#![feature(proc_macro_hygiene)]
+
 
 use std::{path::Path, process};
 

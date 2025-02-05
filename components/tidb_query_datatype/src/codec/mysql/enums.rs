@@ -185,11 +185,11 @@ impl<'a> ToInt for EnumRef<'a> {
     }
 }
 
-impl<'a> ToString for EnumRef<'a> {
-    fn to_string(&self) -> String {
-        String::from_utf8_lossy(self.name).to_string()
-    }
-}
+// impl<'a> ToString for EnumRef<'a> {
+//     fn to_string(&self) -> String {
+//         String::from_utf8_lossy(self.name).to_string()
+//     }
+// }
 
 pub trait EnumEncoder: NumberEncoder {
     #[inline]

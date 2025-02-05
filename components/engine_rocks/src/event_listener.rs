@@ -1,5 +1,6 @@
 // Copyright 2020 TiKV Project Authors. Licensed under Apache-2.0.
 
+use std::path::Path;
 use engine_traits::PersistenceListener;
 use file_system::{get_io_type, set_io_type, IoType};
 use regex::Regex;
@@ -207,21 +208,60 @@ impl rocksdb::EventListener for RocksPersistenceListener {
     }
 
     fn on_flush_completed(&self, job: &FlushJobInfo) {
-        let num = match job
-            .file_path()
-            .file_prefix()
-            .and_then(|n| n.to_str())
-            .map(|n| n.parse())
-        {
-            Some(Ok(n)) => n,
-            _ => {
+        let num = match custom_file_prefix(job.file_path()) {
+            Some(n) => match n.parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    slog_global::error!("failed to parse file number"; "path" => job.file_path().display());
+                    0
+                }
+            },
+            None => {
                 slog_global::error!("failed to parse file number"; "path" => job.file_path().display());
                 0
             }
         };
+        
+        // let num = match job
+        //     .file_path()
+        //     .file_prefix()
+        //     .and_then(|n| n.to_str())
+        //     .map(|n| n.parse())
+        // {
+        //     Some(Ok(n)) => n,
+        //     _ => {
+        //         slog_global::error!("failed to parse file number"; "path" => job.file_path().display());
+        //         0
+        //     }
+        // };
         self.0
             .on_flush_completed(job.cf_name(), job.largest_seqno(), num);
     }
+}
+
+// Simulate the logic of `file_prefix()` which is unstable. 
+fn custom_file_prefix(path: &Path) -> Option<&str> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| {
+            if let Some(first_dot) = name.find('.') {
+                if first_dot == 0 {
+                    // If the file name starts with a dot, find the second dot
+                    if let Some(second_dot) = name[1..].find('.') {
+                        Some(&name[..second_dot + 1])
+                    } else {
+                        // If there is no second dot, return the entire name
+                        Some(name)
+                    }
+                } else {
+                    // If the file name does not start with a dot, return the portion before the first dot
+                    Some(&name[..first_dot])
+                }
+            } else {
+                // If there is no dot, return the entire name
+                Some(name)
+            }
+        })
 }
 
 #[cfg(test)]

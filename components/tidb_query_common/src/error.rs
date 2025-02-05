@@ -120,19 +120,31 @@ impl From<StorageError> for Error {
     }
 }
 
-impl From<EvaluateError> for Error {
-    #[inline]
-    fn from(e: EvaluateError) -> Self {
-        Error(Box::new(ErrorInner::Evaluate(e)))
-    }
-}
+// impl From<EvaluateError> for Error {
+//     #[inline]
+//     fn from(e: EvaluateError) -> Self {
+//         Error(Box::new(ErrorInner::Evaluate(e)))
+//     }
+// }
 
-// Any error that turns to `EvaluateError` can be turned to `Error` as well.
-impl<T: Into<EvaluateError>> From<T> for Error {
+// // Any error that turns to `EvaluateError` can be turned to `Error` as well.
+// impl<T: Into<EvaluateError>> From<T> for Error {
+//     #[inline]
+//     default fn from(err: T) -> Self {
+//         let eval_error = err.into();
+//         eval_error.into()
+//     }
+// }
+
+// Avoid using specialization. 
+impl<T> From<T> for Error
+where
+    EvaluateError: From<T>,
+{
     #[inline]
-    default fn from(err: T) -> Self {
-        let eval_error = err.into();
-        eval_error.into()
+    fn from(err: T) -> Self {
+        let eval_error: EvaluateError = EvaluateError::from(err);
+        Error(Box::new(ErrorInner::Evaluate(eval_error)))
     }
 }
 

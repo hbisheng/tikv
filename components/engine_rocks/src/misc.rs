@@ -187,16 +187,16 @@ impl MiscExt for RocksEngine {
                     .get_approximate_active_memtable_stats_cf(handle)
                     .map(|(_, time)| (handle, time))
             })
-            .min_by(|(_, a), (_, b)| a.cmp(b))
-            && age_threshold.map_or(true, |threshold| time <= threshold)
-        {
-            let mut fopts = FlushOptions::default();
-            fopts.set_wait(wait);
-            fopts.set_allow_write_stall(true);
-            fopts.set_check_if_compaction_disabled(true);
-            fopts.set_expected_oldest_key_time(time);
-            self.as_inner().flush_cf(handle, &fopts).map_err(r2e)?;
-            return Ok(true);
+            .min_by(|(_, a), (_, b)| a.cmp(b)) {
+            if age_threshold.map_or(true, |threshold| time <= threshold) {
+                let mut fopts = FlushOptions::default();
+                fopts.set_wait(wait);
+                fopts.set_allow_write_stall(true);
+                fopts.set_check_if_compaction_disabled(true);
+                fopts.set_expected_oldest_key_time(time);
+                self.as_inner().flush_cf(handle, &fopts).map_err(r2e)?;
+                return Ok(true);
+            }
         }
         Ok(false)
     }

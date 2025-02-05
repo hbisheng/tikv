@@ -355,11 +355,12 @@ impl RaftLogBatch for RocksWriteBatchVec {
     ) -> Result<()> {
         let overwrite_to = overwrite_to.unwrap_or(0);
         if let Some(last) = entries.last()
-            && last.get_index() + 1 < overwrite_to
         {
-            for index in last.get_index() + 1..overwrite_to {
-                let key = keys::raft_log_key(raft_group_id, index);
-                self.delete(&key).unwrap();
+            if last.get_index() + 1 < overwrite_to {
+                for index in last.get_index() + 1..overwrite_to {
+                    let key = keys::raft_log_key(raft_group_id, index);
+                    self.delete(&key).unwrap();
+                }
             }
         }
         if let Some(max_size) = entries.iter().map(|e| e.compute_size()).max() {

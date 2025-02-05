@@ -1919,50 +1919,50 @@ impl FromStr for Decimal {
     }
 }
 
-impl ToString for Decimal {
-    fn to_string(&self) -> String {
-        let (mut buf, word_start_idx, int_len, int_cnt, frac_cnt) = self.prepare_buf();
-        if self.negative {
-            buf.push(b'-');
-        }
-        let padding = int_len - cmp::max(int_cnt, 1);
-        buf.resize(padding as usize + buf.len(), b'0');
-        if int_cnt > 0 {
-            let base_idx = buf.len();
-            let mut idx = base_idx + int_cnt as usize;
-            let mut widx = word_start_idx + word_cnt!(int_cnt) as usize;
-            buf.resize(idx, 0);
-            while idx > base_idx {
-                widx -= 1;
-                let mut x = self.word_buf[widx];
-                for _ in 0..cmp::min((idx - base_idx) as u8, DIGITS_PER_WORD) {
-                    idx -= 1;
-                    buf[idx] = b'0' + (x % 10) as u8;
-                    x /= 10;
-                }
-            }
-        } else {
-            buf.push(b'0');
-        };
-        if frac_cnt > 0 {
-            buf.push(b'.');
-            let mut widx = word_start_idx + word_cnt!(int_cnt) as usize;
-            let exp_idx = buf.len() + frac_cnt as usize;
-            while buf.len() < exp_idx {
-                let mut x = self.word_buf[widx];
-                for _ in 0..cmp::min((exp_idx - buf.len()) as u8, DIGITS_PER_WORD) {
-                    buf.push((x / DIG_MASK) as u8 + b'0');
-                    x = (x % DIG_MASK) * 10;
-                }
-                widx += 1;
-            }
-            while buf.capacity() != buf.len() {
-                buf.push(b'0');
-            }
-        }
-        unsafe { String::from_utf8_unchecked(buf) }
-    }
-}
+// impl ToString for Decimal {
+//     fn to_string(&self) -> String {
+//         let (mut buf, word_start_idx, int_len, int_cnt, frac_cnt) = self.prepare_buf();
+//         if self.negative {
+//             buf.push(b'-');
+//         }
+//         let padding = int_len - cmp::max(int_cnt, 1);
+//         buf.resize(padding as usize + buf.len(), b'0');
+//         if int_cnt > 0 {
+//             let base_idx = buf.len();
+//             let mut idx = base_idx + int_cnt as usize;
+//             let mut widx = word_start_idx + word_cnt!(int_cnt) as usize;
+//             buf.resize(idx, 0);
+//             while idx > base_idx {
+//                 widx -= 1;
+//                 let mut x = self.word_buf[widx];
+//                 for _ in 0..cmp::min((idx - base_idx) as u8, DIGITS_PER_WORD) {
+//                     idx -= 1;
+//                     buf[idx] = b'0' + (x % 10) as u8;
+//                     x /= 10;
+//                 }
+//             }
+//         } else {
+//             buf.push(b'0');
+//         };
+//         if frac_cnt > 0 {
+//             buf.push(b'.');
+//             let mut widx = word_start_idx + word_cnt!(int_cnt) as usize;
+//             let exp_idx = buf.len() + frac_cnt as usize;
+//             while buf.len() < exp_idx {
+//                 let mut x = self.word_buf[widx];
+//                 for _ in 0..cmp::min((exp_idx - buf.len()) as u8, DIGITS_PER_WORD) {
+//                     buf.push((x / DIG_MASK) as u8 + b'0');
+//                     x = (x % DIG_MASK) * 10;
+//                 }
+//                 widx += 1;
+//             }
+//             while buf.capacity() != buf.len() {
+//                 buf.push(b'0');
+//             }
+//         }
+//         unsafe { String::from_utf8_unchecked(buf) }
+//     }
+// }
 
 impl Display for Decimal {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {

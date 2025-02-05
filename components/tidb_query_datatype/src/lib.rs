@@ -2,11 +2,10 @@
 
 //! This crate stores data types which used by other tidb query related crates.
 
-#![feature(proc_macro_hygiene)]
+
 
 #![allow(internal_features)]
-#![feature(str_internals)]
-#![feature(core_intrinsics)]
+
 
 #[macro_use]
 extern crate num_derive;
