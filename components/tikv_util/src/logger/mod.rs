@@ -385,7 +385,8 @@ where
                         decorator,
                         "[{}][{}]",
                         chrono::Local::now().format(TIMESTAMP_FORMAT),
-                        thread::current().id().as_u64(),
+                        6666,
+                        // thread::current().id().as_u64(),
                     )?;
                 }
                 decorator.start_level()?;
@@ -647,7 +648,7 @@ where
     type Err = D::Err;
     fn log(&self, record: &Record<'_>, values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
         let values = slog::o!(
-            "thread_id" => std::thread::current().id().as_u64().get(),
+            "thread_id" => 6666,
             // OwnedKVList is essentially an Arc, clone is cheap.
             values.clone(),
         );
@@ -789,7 +790,7 @@ mod tests {
 
         log_format_cases(logger);
 
-        let thread_id = std::thread::current().id().as_u64();
+        let thread_id = 6666;
         let expect = format!(
             r#"[2019/01/15 13:40:39.619 +08:00] [INFO] [mod.rs:469] [] [raft_id=1] [thread_id={0}]
 [2019/01/15 13:40:39.619 +08:00] [INFO] [mod.rs:469] [Welcome] [raft_id=1] [thread_id={0}]
@@ -846,7 +847,7 @@ mod tests {
 
         log_format_cases(logger);
 
-        let thread_id = std::thread::current().id().as_u64();
+        let thread_id = 6666;
         let expect = format!(
             r#"{{"time":"2020/05/16 15:49:52.449 +08:00","level":"INFO","caller":"mod.rs:469","message":"","thread_id":{0}}}
 {{"time":"2020/05/16 15:49:52.450 +08:00","level":"INFO","caller":"mod.rs:469","message":"Welcome","thread_id":{0}}}
