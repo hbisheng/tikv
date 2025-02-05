@@ -1,6 +1,5 @@
 // Copyright 2024 TiKV Project Authors. Licensed under Apache-2.0.
 
-use core::slice::SlicePattern;
 use std::{fmt::Debug, ops::Deref, result, sync::Arc};
 
 use bytes::Bytes;
@@ -478,7 +477,8 @@ impl Iterator for RegionCacheIterator {
     fn value(&self) -> &[u8] {
         assert!(self.valid);
         if self.direction == Direction::Backward {
-            self.saved_value.as_ref().unwrap().as_slice()
+            let a = self.saved_value.as_ref().unwrap();
+            &a[..]
         } else {
             self.iter.value().as_slice()
         }
@@ -647,7 +647,7 @@ impl Deref for RegionCacheDbVector {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        self.0.as_slice()
+        &self.0[..]
     }
 }
 
@@ -655,7 +655,7 @@ impl DbVector for RegionCacheDbVector {}
 
 impl<'a> PartialEq<&'a [u8]> for RegionCacheDbVector {
     fn eq(&self, rhs: &&[u8]) -> bool {
-        self.0.as_slice() == *rhs
+        &self.0[..] == *rhs
     }
 }
 

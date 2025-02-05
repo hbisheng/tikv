@@ -4,7 +4,6 @@
 
 #![allow(internal_features)]
 
-#![feature(slice_pattern)]
 #![feature(trait_alias)]
 
 use std::sync::Arc;

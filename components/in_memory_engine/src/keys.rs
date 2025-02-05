@@ -1,6 +1,5 @@
 // Copyright 2023 TiKV Project Authors. Licensed under Apache-2.0.
 
-use core::slice::SlicePattern;
 use std::{
     cmp::{self, Ordering},
     fmt,
@@ -67,7 +66,7 @@ impl InternalBytes {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        self.bytes.as_slice()
+        &self.bytes[..]
     }
 
     pub fn same_user_key_with(&self, other: &InternalBytes) -> bool {
