@@ -10,8 +10,7 @@
 
 #![allow(incomplete_features)]
 
-#![feature(specialization)]
-#![feature(const_mut_refs)]
+
 
 #[macro_use(box_try, warn)]
 extern crate tikv_util;

@@ -1,5 +1,6 @@
 // Copyright 2019 TiKV Project Authors. Licensed under Apache-2.0.
 
+#![feature(specialization)]
 use num_traits::identities::Zero;
 use tidb_query_codegen::rpn_fn;
 use tidb_query_common::Result;

@@ -75,7 +75,7 @@ where
                 Ok(()) => Ok(()),
                 Err(TrySendError::Disconnected(_)) if self.router.is_shutdown() => Ok(()),
                 Err(TrySendError::Disconnected(PeerMsg::CasualMessage(
-                    box CasualMessage::GcSnap { snaps },
+                    CasualMessage::GcSnap { snaps },
                 ))) => {
                     // The snapshot exists because MsgAppend has been rejected. So the
                     // peer must have been exist. But now it's disconnected, so the peer

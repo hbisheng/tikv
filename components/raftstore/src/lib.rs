@@ -1,12 +1,11 @@
 // Copyright 2016 TiKV Project Authors. Licensed under Apache-2.0.
 
 #![cfg_attr(test, feature(test))]
-#![feature(cell_update)]
-#![feature(box_patterns)]
 
 
-#![feature(type_alias_impl_trait)]
-#![feature(impl_trait_in_assoc_type)]
+
+
+
 #![recursion_limit = "256"]
 
 #[cfg(test)]

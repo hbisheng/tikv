@@ -3011,7 +3011,7 @@ where
             }
         }
 
-        if let HandleReadyResult::Snapshot(box HandleSnapshotResult {
+        if let HandleReadyResult::Snapshot(HandleSnapshotResult {
             msgs,
             snap_region,
             destroy_regions,

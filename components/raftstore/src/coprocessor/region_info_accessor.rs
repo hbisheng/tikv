@@ -734,10 +734,11 @@ impl RegionCollector {
                 return;
             }
             if let RaftStoreEvent::RoleChange { initialized, .. } = &event
-                && !initialized
             {
-                // Ignore uninitialized peers.
-                return;
+                if !initialized {
+                    // Ignore uninitialized peers.
+                    return;
+                }
             }
             if !self.check_region_range(region, true) {
                 debug!(
@@ -979,10 +980,11 @@ impl RegionInfoProvider for RegionInfoAccessor {
             key,
             Box::new(move |iter| {
                 if let Some(info) = iter.next()
-                    && info.region.get_start_key() <= key_in_vec.as_slice()
                 {
-                    if let Err(e) = tx.send(info.region.clone()) {
-                        warn!("failed to send find_region_by_key result: {:?}", e);
+                    if info.region.get_start_key() <= key_in_vec.as_slice() {
+                        if let Err(e) = tx.send(info.region.clone()) {
+                            warn!("failed to send find_region_by_key result: {:?}", e);
+                        }
                     }
                 }
             }),

@@ -4,7 +4,7 @@
 
 #![allow(incomplete_features)]
 
-#![feature(specialization)]
+
 
 #[macro_use(box_try)]
 extern crate tikv_util;

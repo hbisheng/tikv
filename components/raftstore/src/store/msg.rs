@@ -291,7 +291,10 @@ impl<S: Snapshot> WriteCallback for Callback<S> {
         self.invoke_committed();
     }
 
-    type TimeTrackerListRef<'a> = impl IntoIterator<Item = &'a TimeTracker>;
+    // type TimeTrackerListRef<'a> = impl IntoIterator<Item = &'a TimeTracker>;
+    // type TimeTrackerListRef<'a> = Vec<&'a TimeTracker>; // Use concrete Vec type
+    type TimeTrackerListRef<'a> = Box<dyn Iterator<Item = &'a TimeTracker> + 'a>;
+    
     #[inline]
     fn write_trackers(&self) -> Self::TimeTrackerListRef<'_> {
         let trackers = match self {
@@ -301,7 +304,9 @@ impl<S: Snapshot> WriteCallback for Callback<S> {
         trackers.into_iter().flatten()
     }
 
-    type TimeTrackerListMut<'a> = impl IntoIterator<Item = &'a mut TimeTracker>;
+    // type TimeTrackerListMut<'a> = impl IntoIterator<Item = &'a mut TimeTracker>;
+    // type TimeTrackerListMut<'a> = Vec<&'a mut TimeTracker>; // Use concrete Vec type
+    type TimeTrackerListMut<'a> = Box<dyn Iterator<Item = &'a mut TimeTracker> + 'a>;
     #[inline]
     fn write_trackers_mut(&mut self) -> Self::TimeTrackerListMut<'_> {
         let trackers = match self {
@@ -338,13 +343,15 @@ where
         }
     }
 
-    type TimeTrackerListRef<'a> = impl Iterator<Item = &'a TimeTracker> + 'a;
+    // type TimeTrackerListRef<'a> = impl Iterator<Item = &'a TimeTracker> + 'a;
+    type TimeTrackerListRef<'a> = Box<dyn Iterator<Item = &'a TimeTracker> + 'a>;
     #[inline]
     fn write_trackers(&self) -> Self::TimeTrackerListRef<'_> {
         self.iter().flat_map(|c| c.write_trackers())
     }
 
-    type TimeTrackerListMut<'a> = impl Iterator<Item = &'a mut TimeTracker> + 'a;
+    // type TimeTrackerListMut<'a> = impl Iterator<Item = &'a mut TimeTracker> + 'a;
+    type TimeTrackerListMut<'a> = Box<dyn Iterator<Item = &'a mut TimeTracker> + 'a>;
     #[inline]
     fn write_trackers_mut(&mut self) -> Self::TimeTrackerListMut<'_> {
         self.iter_mut().flat_map(|c| c.write_trackers_mut())
@@ -927,7 +934,7 @@ impl<EK: KvEngine> PeerMsg<EK> {
     pub fn is_send_failure_ignorable(&self) -> bool {
         matches!(
             self,
-            PeerMsg::SignificantMsg(box SignificantMsg::CaptureChange { .. })
+            PeerMsg::SignificantMsg(SignificantMsg::CaptureChange { .. })
         )
     }
 }

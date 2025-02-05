@@ -466,8 +466,8 @@ where
         let region_id = cmd.request.get_header().get_region_id();
         match self.send(region_id, PeerMsg::RaftCommand(Box::new(cmd))) {
             Ok(()) => Ok(()),
-            Err(TrySendError::Full(PeerMsg::RaftCommand(box cmd))) => Err(TrySendError::Full(cmd)),
-            Err(TrySendError::Disconnected(PeerMsg::RaftCommand(box cmd))) => {
+            Err(TrySendError::Full(PeerMsg::RaftCommand(cmd))) => Err(TrySendError::Full(cmd)),
+            Err(TrySendError::Disconnected(PeerMsg::RaftCommand(cmd))) => {
                 Err(TrySendError::Disconnected(cmd))
             }
             _ => unreachable!(),
