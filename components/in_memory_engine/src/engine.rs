@@ -415,12 +415,12 @@ impl RegionCacheMemoryEngine {
         &self,
         region: &CacheRegion,
         evict_reason: EvictReason,
-        cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>,
+        // cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>,
     ) {
         let deletable_regions = self
             .core
             .region_manager
-            .evict_region(region, evict_reason, cb);
+            .evict_region(region, evict_reason);
         if !deletable_regions.is_empty() {
             // The region can be deleted directly.
             if let Err(e) = self
@@ -546,7 +546,7 @@ impl RegionCacheEngineExt for RegionCacheMemoryEngine {
     fn on_region_event(&self, event: RegionEvent) {
         match event {
             RegionEvent::Eviction { region, reason } => {
-                self.evict_region(&region, reason, None);
+                self.evict_region(&region, reason);
             }
             RegionEvent::TryLoad {
                 region,
@@ -598,7 +598,7 @@ impl RegionCacheEngineExt for RegionCacheMemoryEngine {
                 }
 
                 for r in regions {
-                    self.evict_region(&r, reason, None);
+                    self.evict_region(&r, reason);
                 }
             }
         }

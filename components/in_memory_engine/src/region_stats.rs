@@ -1,5 +1,7 @@
 // Copyright 2024 TiKV Project Authors. Licensed under Apache-2.0.
 use std::{
+    pin::Pin,
+    future::Future,
     collections::{BTreeMap, HashSet},
     num::NonZeroUsize,
     sync::{
@@ -346,7 +348,7 @@ impl RegionStatsManager {
         F: FnMut(
             &CacheRegion,
             EvictReason,
-            Option<Box<dyn AsyncFnOnce + Send + Sync>>,
+            // Option<Box<dyn AsyncFnOnce + Send + Sync>>,
         ) -> Vec<CacheRegion>,
     {
         // Get regions' stat of the cached region and sort them by next + prev in
@@ -411,24 +413,24 @@ impl RegionStatsManager {
         for regions in evict_candidates.chunks(2) {
             let mut deletable_regions = vec![];
 
-            let (tx, mut rx) = mpsc::channel(3);
+            // let (tx, mut rx) = mpsc::channel(3);
             for r in regions {
                 info!(
                     "ime evict on evict threshold reached";
                     "region_to_evict" => ?r,
                 );
 
-                let tx_clone = tx.clone();
+                // let tx_clone = tx.clone();
                 deletable_regions.extend(evict_region(
                     &CacheRegion::from_region(r),
                     EvictReason::MemoryLimitReached,
                     // This callback will be executed when eviction finishes at `on_delete_regions`
                     // and when the reletive rx.recv() returns, we know some memory are freed.
-                    Some(Box::new(move || {
-                        Box::pin(async move {
-                            let _ = tx_clone.send(()).await;
-                        })
-                    })),
+                    // Some(Box::new(move || {
+                    //     Box::pin(async move {
+                    //         let _ = tx_clone.send(()).await;
+                    //     }) as Pin<Box<dyn Future<Output = ()> + Send>>
+                    // }) as Box<dyn AsyncFnOnce + Send + Sync> ),
                 ));
                 self.handle_region_evicted(r);
             }
@@ -446,9 +448,9 @@ impl RegionStatsManager {
             for _ in 0..regions.len() {
                 // It's better to use `timeout(Duration, rx.recv())` but which needs to use
                 // tokio runtime with timer enabled while yatp does not.
-                if rx.recv().await.is_none() {
-                    break;
-                }
+                // if rx.recv().await.is_none() {
+                //     break;
+                // }
             }
             if !memory_controller.reached_stop_load_threshold() {
                 return;
@@ -681,7 +683,8 @@ pub mod tests {
         let cbs2 = cbs.clone();
         let evict_fn = move |evict_region: &CacheRegion,
                              _: EvictReason,
-                             cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>|
+                            //  cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>
+                             |
               -> Vec<CacheRegion> {
             evicted_regions2.lock().push(evict_region.id);
             cbs2.lock().push(cb.unwrap());

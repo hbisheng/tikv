@@ -277,7 +277,7 @@ impl RegionCacheWriteBatch {
             return;
         }
         self.engine
-            .evict_region(self.current_region.as_ref().unwrap(), reason, None);
+            .evict_region(self.current_region.as_ref().unwrap(), reason);
         self.current_region_evicted = true;
     }
 

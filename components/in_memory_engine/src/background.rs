@@ -1,6 +1,6 @@
 // Copyright 2024 TiKV Project Authors. Licensed under Apache-2.0.
 
-use std::{borrow::Cow, fmt, sync::Arc, time::Duration};
+use std::{pin::Pin, future::Future, borrow::Cow, fmt, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use crossbeam::{
@@ -292,7 +292,7 @@ impl BgWorkManager {
                         .regions_map()
                         .write()
                         .remove_manual_load_range(range.clone());
-                    region_manager.evict_region(range, EvictReason::Manual, None);
+                    region_manager.evict_region(range, EvictReason::Manual);
                     return;
                 }
 
@@ -598,7 +598,7 @@ impl BackgroundRunnerCore {
                 meta.set_safe_point(safe_point);
             } else {
                 assert_eq!(meta.get_state(), RegionState::LoadingCanceled);
-                meta.mark_evict(RegionState::Evicting, EvictReason::LoadFailed, None);
+                meta.mark_evict(RegionState::Evicting, EvictReason::LoadFailed);
                 remove_regions.push(meta.get_region().clone());
             }
         };
@@ -653,7 +653,7 @@ impl BackgroundRunnerCore {
             } else {
                 EvictReason::LoadFailedWithoutStart
             };
-            meta.mark_evict(RegionState::Evicting, reason, None);
+            meta.mark_evict(RegionState::Evicting, reason);
             remove_regions.push(meta.get_region().clone());
         };
 
@@ -717,19 +717,21 @@ impl BackgroundRunnerCore {
             "regions_to_load" => ?&regions_to_load,
             "regions_to_evict" => ?&regions_to_evict,
         );
-        let (tx, mut rx) = mpsc::channel(evict_count + 1);
+        // let (tx, mut rx) = mpsc::channel(evict_count + 1);
         for evict_region in regions_to_evict {
             let cache_region = CacheRegion::from_region(&evict_region);
-            let tx_clone = tx.clone();
+            // let tx_clone = tx.clone();
             // Bound is set to 1 so that the sender side will not be blocked
             let deletable_regions = self.engine.region_manager().evict_region(
                 &cache_region,
                 EvictReason::AutoEvict,
-                Some(Box::new(move || {
-                    Box::pin(async move {
-                        let _ = tx_clone.send(()).await;
-                    })
-                })),
+                // Some(
+                //     Box::new(move || {
+                //         Box::pin(async move {
+                //             let _ = tx_clone.send(()).await;
+                //         }) as Pin<Box<dyn Future<Output = ()> + Send>>
+                //     }) as Box<dyn AsyncFnOnce + Send + Sync>
+                // ),
             );
             info!(
                 "ime load_evict: auto evict";
@@ -750,11 +752,11 @@ impl BackgroundRunnerCore {
                 assert!(tikv_util::thread_group::is_shutdown(!cfg!(test)));
             }
         }
-        for _ in 0..evict_count {
-            if rx.recv().await.is_none() {
-                break;
-            }
-        }
+        // for _ in 0..evict_count {
+        //     if rx.recv().await.is_none() {
+        //         break;
+        //     }
+        // }
         if !self.memory_controller.reached_stop_load_threshold() {
             let expected_new_count = self
                 .memory_controller
@@ -1153,12 +1155,13 @@ impl Runnable for BackgroundRunner {
 
                             let evict_fn = |evict_region: &CacheRegion,
                                             evict_reason: EvictReason,
-                                            cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>|
+                                            // cb: Option<Box<dyn AsyncFnOnce + Send + Sync>>
+                                            |
                              -> Vec<CacheRegion> {
                                 core.engine.region_manager.evict_region(
                                     evict_region,
                                     evict_reason,
-                                    cb,
+                                    // cb,
                                 )
                             };
 
