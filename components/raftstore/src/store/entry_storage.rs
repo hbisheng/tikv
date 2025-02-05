@@ -49,6 +49,11 @@ pub fn last_index(state: &RaftLocalState) -> u64 {
     state.get_last_index()
 }
 
+fn increment_cell(cell: &Cell<u64>) {
+    let current = cell.get();
+    cell.set(current + 1);
+}
+
 /// Committed entries sent to apply threads.
 #[derive(Clone)]
 pub struct CachedEntries {
@@ -754,7 +759,7 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
             None => {
                 let prev = self.async_fetch_results.borrow_mut().remove(&low);
                 if prev.is_some() {
-                    self.raftlog_fetch_stats.fetch_unused.update(|m| m + 1);
+                    increment_cell(&self.raftlog_fetch_stats.fetch_unused);
                 }
             }
         }
@@ -851,7 +856,7 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
             );
             // low index or max size is changed, the result is not fit for the current
             // range, so refetch again.
-            self.raftlog_fetch_stats.fetch_invalid.update(|m| m + 1);
+            increment_cell(&self.raftlog_fetch_stats.fetch_invalid);
             res.tried_cnt + 1
         } else {
             1
@@ -864,7 +869,9 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
         //  - else: get [low, high) synchronously
         if tried_cnt >= MAX_ASYNC_FETCH_TRY_CNT {
             // even the larger range is invalid again, fallback to fetch in sync way
-            self.raftlog_fetch_stats.fallback_fetch.update(|m| m + 1);
+            let current = self.raftlog_fetch_stats.fallback_fetch.get();
+            self.raftlog_fetch_stats.fallback_fetch.set(current+1);
+
             let count = self.raft_engine.fetch_entries_to(
                 region_id,
                 low,
@@ -875,7 +882,9 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
             return Ok(count);
         }
 
-        self.raftlog_fetch_stats.async_fetch.update(|m| m + 1);
+        let c = self.raftlog_fetch_stats.async_fetch.get();
+        self.raftlog_fetch_stats.async_fetch.set(c+1);
+
         self.async_fetch_results
             .borrow_mut()
             .insert(low, RaftlogFetchState::Fetching(Instant::now_coarse()));
@@ -910,12 +919,12 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
         }
         let cache_low = self.cache.first_index().unwrap_or(u64::MAX);
         if high <= cache_low {
-            self.cache.miss.update(|m| m + 1);
+            increment_cell(&self.cache.miss);
             return if context.can_async() {
                 self.async_fetch(self.region_id, low, high, max_size, context, &mut ents)?;
                 Ok(ents)
             } else {
-                self.raftlog_fetch_stats.sync_fetch.update(|m| m + 1);
+                increment_cell(&self.raftlog_fetch_stats.sync_fetch);
                 self.raft_engine.fetch_entries_to(
                     self.region_id,
                     low,
@@ -927,11 +936,11 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
             };
         }
         let begin_idx = if low < cache_low {
-            self.cache.miss.update(|m| m + 1);
+            increment_cell(&self.cache.miss);
             let fetched_count = if context.can_async() {
                 self.async_fetch(self.region_id, low, cache_low, max_size, context, &mut ents)?
             } else {
-                self.raftlog_fetch_stats.sync_fetch.update(|m| m + 1);
+                increment_cell(&self.raftlog_fetch_stats.sync_fetch);
                 self.raft_engine.fetch_entries_to(
                     self.region_id,
                     low,
@@ -948,7 +957,7 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
         } else {
             low
         };
-        self.cache.hit.update(|h| h + 1);
+        increment_cell(&self.cache.hit);
         let fetched_size = ents.iter().fold(0, |acc, e| acc + e.compute_size());
         self.cache
             .fetch_entries_to(begin_idx, high, fetched_size as u64, max_size, &mut ents);

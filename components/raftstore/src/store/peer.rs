@@ -3011,14 +3011,16 @@ where
             }
         }
 
-        if let HandleReadyResult::Snapshot(HandleSnapshotResult {
-            msgs,
-            snap_region,
-            destroy_regions,
-            last_first_index,
-            for_witness,
-        }) = res
+        if let HandleReadyResult::Snapshot(box_result) = res
         {
+            let HandleSnapshotResult {
+                msgs,
+                snap_region,
+                destroy_regions,
+                last_first_index,
+                for_witness,
+            } = *box_result; 
+            
             if for_witness {
                 // inform next round to check apply status
                 ctx.router

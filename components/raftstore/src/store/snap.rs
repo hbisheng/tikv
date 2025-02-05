@@ -2359,18 +2359,21 @@ impl TabletSnapManager {
     }
 
     pub fn stats(&self) -> SnapStats {
-        let stats: Vec<SnapshotStat> = self
-            .stats
-            .lock()
-            .unwrap()
-            .extract_if(|_, (_, stat)| stat.get_region_id() > 0)
-            .map(|(_, (_, stat))| stat)
-            .filter(|stat| stat.get_total_duration_sec() > 1)
+        let mut stats = self.stats.lock().unwrap();
+
+        let stats_to_return: Vec<SnapshotStat> = stats
+            .iter()
+            .filter(|(_, (_, stat))| stat.get_region_id() > 0) // Filter valid elements
+            .map(|(_, (_, stat))| (*stat).clone() ) // Extract the stat
+            .filter(|stat| stat.get_total_duration_sec() > 1) // Further filter based on duration
             .collect();
+
+        stats.retain(|_, (_, stat)| stat.get_region_id() <= 0);
+
         SnapStats {
             sending_count: self.sending_count.load(Ordering::SeqCst),
             receiving_count: self.recving_count.load(Ordering::SeqCst),
-            stats,
+            stats: stats_to_return,
         }
     }
 

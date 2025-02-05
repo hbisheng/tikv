@@ -214,7 +214,13 @@ where
         while let Ok(msg) = self.receiver.try_recv() {
             let callback = match msg {
                 PeerMsg::RaftCommand(cmd) => cmd.callback,
-                PeerMsg::CasualMessage(CasualMessage::SplitRegion { callback, .. }) => callback,
+                PeerMsg::CasualMessage(casual_message_box) => {
+                    if let CasualMessage::SplitRegion { callback, .. } = *casual_message_box {
+                        callback
+                    } else {
+                        continue;
+                    }
+                },
                 PeerMsg::RaftMessage(im, _) => {
                     raft_messages_size += im.heap_size;
                     continue;

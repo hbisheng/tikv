@@ -301,7 +301,7 @@ impl<S: Snapshot> WriteCallback for Callback<S> {
             Callback::Write { trackers, .. } => Some(trackers),
             _ => None,
         };
-        trackers.into_iter().flatten()
+        Box::new(trackers.into_iter().flatten())
     }
 
     // type TimeTrackerListMut<'a> = impl IntoIterator<Item = &'a mut TimeTracker>;
@@ -313,7 +313,7 @@ impl<S: Snapshot> WriteCallback for Callback<S> {
             Callback::Write { trackers, .. } => Some(trackers),
             _ => None,
         };
-        trackers.into_iter().flatten()
+        Box::new(trackers.into_iter().flatten())
     }
 
     #[inline]
@@ -347,14 +347,15 @@ where
     type TimeTrackerListRef<'a> = Box<dyn Iterator<Item = &'a TimeTracker> + 'a>;
     #[inline]
     fn write_trackers(&self) -> Self::TimeTrackerListRef<'_> {
-        self.iter().flat_map(|c| c.write_trackers())
+        // self.iter().flat_map(|c| c.write_trackers())
+        Box::new(self.iter().flat_map(|c| c.write_trackers()))
     }
 
     // type TimeTrackerListMut<'a> = impl Iterator<Item = &'a mut TimeTracker> + 'a;
     type TimeTrackerListMut<'a> = Box<dyn Iterator<Item = &'a mut TimeTracker> + 'a>;
     #[inline]
     fn write_trackers_mut(&mut self) -> Self::TimeTrackerListMut<'_> {
-        self.iter_mut().flat_map(|c| c.write_trackers_mut())
+        Box::new(self.iter_mut().flat_map(|c| c.write_trackers_mut()))
     }
 
     #[inline]
@@ -934,7 +935,7 @@ impl<EK: KvEngine> PeerMsg<EK> {
     pub fn is_send_failure_ignorable(&self) -> bool {
         matches!(
             self,
-            PeerMsg::SignificantMsg(SignificantMsg::CaptureChange { .. })
+            PeerMsg::SignificantMsg(ref msg) if matches!(&**msg, SignificantMsg::CaptureChange { .. }),
         )
     }
 }

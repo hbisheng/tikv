@@ -75,30 +75,34 @@ where
                 Ok(()) => Ok(()),
                 Err(TrySendError::Disconnected(_)) if self.router.is_shutdown() => Ok(()),
                 Err(TrySendError::Disconnected(PeerMsg::CasualMessage(
-                    CasualMessage::GcSnap { snaps },
+                    boxed_msg
                 ))) => {
-                    // The snapshot exists because MsgAppend has been rejected. So the
-                    // peer must have been exist. But now it's disconnected, so the peer
-                    // has to be destroyed instead of being created.
-                    info!(
-                        "region is disconnected, remove snaps";
-                        "region_id" => region_id,
-                        "snaps" => ?snaps,
-                    );
-                    for (key, is_sending) in snaps {
-                        let snap = match self.snap_mgr.get_snapshot_for_gc(&key, is_sending) {
-                            Ok(snap) => snap,
-                            Err(e) => {
-                                error!(%e;
-                                    "failed to load snapshot";
-                                    "snapshot" => ?key,
-                                );
-                                continue;
-                            }
-                        };
-                        self.snap_mgr.delete_snapshot(&key, snap.as_ref(), false);
+                    if let CasualMessage::GcSnap { snaps } = *boxed_msg {
+                        // The snapshot exists because MsgAppend has been rejected. So the
+                        // peer must have been exist. But now it's disconnected, so the peer
+                        // has to be destroyed instead of being created.
+                        info!(
+                            "region is disconnected, remove snaps";
+                            "region_id" => region_id,
+                            "snaps" => ?snaps,
+                        );
+                        for (key, is_sending) in snaps {
+                            let snap = match self.snap_mgr.get_snapshot_for_gc(&key, is_sending) {
+                                Ok(snap) => snap,
+                                Err(e) => {
+                                    error!(%e;
+                                        "failed to load snapshot";
+                                        "snapshot" => ?key,
+                                    );
+                                    continue;
+                                }
+                            };
+                            self.snap_mgr.delete_snapshot(&key, snap.as_ref(), false);
+                        }
+                        Ok(())
+                    } else {
+                        unreachable!()
                     }
-                    Ok(())
                 }
                 Err(TrySendError::Full(_)) => Ok(()),
                 Err(TrySendError::Disconnected(_)) => unreachable!(),
