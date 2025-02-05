@@ -4212,17 +4212,19 @@ impl TikvConfig {
         // individual block cache sizes. Otherwise use the sum of block cache
         // size of all column families as the shared cache size.
         if let Some(a) = self.rocksdb.defaultcf.block_cache_size
-            && let Some(b) = self.rocksdb.writecf.block_cache_size
-            && let Some(c) = self.rocksdb.lockcf.block_cache_size
         {
-            let d = self
-                .raftdb
-                .defaultcf
-                .block_cache_size
-                .map(|s| s.0)
-                .unwrap_or_default();
-            let sum = a.0 + b.0 + c.0 + d;
-            self.storage.block_cache.capacity = Some(ReadableSize(sum));
+            if let Some(b) = self.rocksdb.writecf.block_cache_size {
+                if let Some(c) = self.rocksdb.lockcf.block_cache_size {
+                    let d = self
+                        .raftdb
+                        .defaultcf
+                        .block_cache_size
+                        .map(|s| s.0)
+                        .unwrap_or_default();
+                    let sum = a.0 + b.0 + c.0 + d;
+                    self.storage.block_cache.capacity = Some(ReadableSize(sum));
+                }
+            }
         }
         if self.backup.sst_max_size.0 < default_coprocessor.region_max_size().0 / 10 {
             warn!(

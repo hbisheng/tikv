@@ -25,9 +25,10 @@ impl<EK: KvEngine, ER: RaftEngine> tikv_kv::RaftExtension for Extension<EK, ER> 
         let msg_ty = msg.get_message().get_msg_type();
         // Channel full and region not found are ignored unless it's a key message.
         if let Err(e) = self.router.send_raft_message(Box::new(msg))
-            && key_message
         {
-            error!("failed to send raft message"; "region_id" => region_id, "msg_ty" => ?msg_ty, "err" => ?e);
+            if key_message {
+                error!("failed to send raft message"; "region_id" => region_id, "msg_ty" => ?msg_ty, "err" => ?e);
+            }
         }
     }
 
