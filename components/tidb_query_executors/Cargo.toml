@@ -21,14 +21,11 @@ protobuf = { version = "2.8", features = ["bytes"] }
 slog = { workspace = true }
 slog-global = { workspace = true }
 smallvec = "1.4"
-tidb_query_aggr = { workspace = true }
 tidb_query_common = { workspace = true }
 tidb_query_datatype = { workspace = true }
-tidb_query_expr = { workspace = true }
 tikv_util = { workspace = true }
 tipb = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1.0"
-tidb_query_codegen = { workspace = true }
 tipb_helper = { workspace = true }

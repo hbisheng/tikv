@@ -15,8 +15,9 @@ use tidb_query_datatype::{
     expr::{EvalConfig, EvalContext},
     FieldTypeAccessor,
 };
-use tidb_query_executors::{interface::BatchExecutor, BatchTableScanExecutor};
-use tidb_query_expr::BATCH_MAX_SIZE;
+
+use tidb_query_datatype::codec::data_type::BATCH_MAX_SIZE;
+
 use tikv_alloc::trace::TraceEvent;
 use tikv_util::{
     metrics::{ThrottleType, NON_TXN_COMMAND_THROTTLE_TIME_COUNTER_VEC_STATIC},
@@ -31,7 +32,6 @@ use crate::{
 };
 
 pub(crate) struct RowSampleBuilder<S: Snapshot, F: KvFormat> {
-    pub(crate) data: BatchTableScanExecutor<TikvStorage<SnapshotStore<S>>, F>,
 
     max_sample_size: usize,
     max_fm_sketch_size: usize,
@@ -526,7 +526,6 @@ impl Drop for BaseRowSampleCollector {
 }
 
 pub(crate) struct SampleBuilder<S: Snapshot, F: KvFormat> {
-    pub(crate) data: BatchTableScanExecutor<TikvStorage<SnapshotStore<S>>, F>,
 
     max_bucket_size: usize,
     max_sample_size: usize,
@@ -566,7 +565,6 @@ impl<S: Snapshot, F: KvFormat> SampleBuilder<S, F> {
             req.take_primary_prefix_column_ids(),
         )?;
         Ok(Self {
-            data: table_scanner,
             max_bucket_size: req.get_bucket_size() as usize,
             max_fm_sketch_size: req.get_sketch_size() as usize,
             max_sample_size: req.get_sample_size() as usize,

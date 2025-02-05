@@ -85,7 +85,6 @@ impl<S: Store + 'static, F: KvFormat> DagHandlerBuilder<S, F> {
 }
 
 pub struct BatchDagHandler {
-    runner: tidb_query_executors::runner::BatchExecutorsRunner<Statistics>,
     data_version: Option<u64>,
 }
 
@@ -103,16 +102,6 @@ impl BatchDagHandler {
         quota_limiter: Arc<QuotaLimiter>,
     ) -> Result<Self> {
         Ok(Self {
-            runner: tidb_query_executors::runner::BatchExecutorsRunner::from_request::<_, F>(
-                req,
-                ranges,
-                TikvStorage::new(store, is_cache_enabled),
-                deadline,
-                streaming_batch_limit,
-                is_streaming,
-                paging_size,
-                quota_limiter,
-            )?,
             data_version,
         })
     }

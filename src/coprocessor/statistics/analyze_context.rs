@@ -11,7 +11,7 @@ use tidb_query_common::storage::{
     Range,
 };
 use tidb_query_datatype::codec::{datum::split_datum, table};
-use tidb_query_executors::interface::BatchExecutor;
+
 use tikv_alloc::trace::MemoryTraceGuard;
 use tikv_util::quota_limiter::QuotaLimiter;
 use tipb::{self, AnalyzeIndexReq, AnalyzeReq, AnalyzeType};

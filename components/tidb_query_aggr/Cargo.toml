@@ -8,10 +8,8 @@ license = "Apache-2.0"
 
 [dependencies]
 match-template = "0.0.1"
-tidb_query_codegen = { workspace = true }
 tidb_query_common = { workspace = true }
 tidb_query_datatype = { workspace = true }
-tidb_query_expr = { workspace = true }
 tikv_util = { workspace = true }
 tipb = { workspace = true }
 

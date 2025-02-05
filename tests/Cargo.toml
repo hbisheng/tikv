@@ -107,7 +107,6 @@ slog-global = { workspace = true }
 tempfile = "3.0"
 tidb_query_common = { workspace = true }
 tidb_query_datatype = { workspace = true }
-tidb_query_executors = { workspace = true }
 tikv = { workspace = true }
 tikv_util = { workspace = true }
 time = { workspace = true }
