@@ -509,9 +509,8 @@ impl<EK: KvEngine, R: ApplyResReporter> Apply<EK, R> {
             derived_req.iter().chain(split_reqs.get_requests())
         };
 
-        let regions: Vec<_> = boundaries
-            .array_windows::<2>()
-            .zip(reqs)
+        let regions: Vec<_> = array_windows(&boundaries, 2)
+            .into_iter().zip(reqs)
             .map(|([start_key, end_key], req)| {
                 let mut new_region = Region::default();
                 new_region.set_id(req.get_new_region_id());
@@ -644,6 +643,17 @@ impl<EK: KvEngine, R: ApplyResReporter> Apply<EK, R> {
         ))
     }
 }
+
+fn array_windows<T>(slice: &[T], window_size: usize) -> Vec<[T; 2]> 
+where
+    T: Copy,
+{
+    slice
+        .windows(window_size)
+        .map(|window| [window[0], window[1]])
+        .collect()
+}
+
 
 impl<EK: KvEngine, ER: RaftEngine> Peer<EK, ER> {
     pub fn ready_to_handle_first_append_message<T>(

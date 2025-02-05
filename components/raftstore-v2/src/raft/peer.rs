@@ -863,7 +863,7 @@ impl<EK: KvEngine, ER: RaftEngine> Peer<EK, ER> {
             return;
         }
         task.extra_write
-            .merge_v2(Box::into_inner(self.state_changes.take().unwrap()));
+            .merge_v2((*self.state_changes.take().unwrap()).into());
     }
 
     #[inline]
