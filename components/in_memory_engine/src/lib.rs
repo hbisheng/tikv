@@ -4,8 +4,6 @@
 
 #![allow(internal_features)]
 
-#![feature(trait_alias)]
-
 use std::sync::Arc;
 
 use futures::future::ready;

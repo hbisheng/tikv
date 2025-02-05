@@ -24,7 +24,12 @@ use tikv_util::{info, time::Instant, warn};
 
 use crate::{metrics::observe_eviction_duration, read::RegionCacheSnapshotMeta};
 
-pub(crate) trait AsyncFnOnce = FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>>;
+// pub(crate) trait AsyncFnOnce = FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>>;
+// pub(crate) type AsyncFnOnce = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send>;
+// Define the AsyncFnOnce trait
+pub(crate) trait AsyncFnOnce: FnOnce() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send {}
+
+
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Default, Hash, EnumCount)]
 #[repr(usize)]
