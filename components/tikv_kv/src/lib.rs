@@ -5,8 +5,6 @@
 //! [`Server`](crate::server::Server). The [`BTreeEngine`](kv::BTreeEngine) and
 //! [`RocksEngine`](RocksEngine) are used for testing only.
 
-#![feature(bound_map)]
-
 
 
 #[macro_use(fail_point)]

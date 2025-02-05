@@ -59,13 +59,14 @@ impl<EK: KvEngine, ER: RaftEngine> Peer<EK, ER> {
         let (ch, res) = CmdResChannel::pair();
         self.on_admin_command(store_ctx, request, ch);
         if let Some(res) = res.take_result()
-            && res.get_header().has_error()
         {
-            error!(
-                self.logger,
-                "failed to propose rollback merge";
-                "res" => ?res,
-            );
+            if res.get_header().has_error() {
+                error!(
+                    self.logger,
+                    "failed to propose rollback merge";
+                    "res" => ?res,
+                );
+            }
         }
     }
 }

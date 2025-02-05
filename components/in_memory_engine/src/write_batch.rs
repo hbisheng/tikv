@@ -129,9 +129,10 @@ impl RegionCacheWriteBatch {
         // If the region is already prepared for write, we do not need to prepare it
         // again. See comments for the `prepared_regions` field for more details.
         if let Some(current_region) = &self.current_region
-            && current_region.id == region.id
         {
-            return;
+            if current_region.id == region.id {
+                return;
+            }
         }
         let time = Instant::now();
         // verify that the region is not prepared before

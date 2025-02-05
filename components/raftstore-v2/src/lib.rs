@@ -25,8 +25,6 @@
 #![feature(array_windows)]
 #![feature(box_into_inner)]
 
-#![feature(option_get_or_insert_default)]
-
 mod batch;
 mod bootstrap;
 mod fsm;

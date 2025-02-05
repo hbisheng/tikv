@@ -65,24 +65,25 @@ impl Store {
             if let Err(TrySendError::Disconnected(msg)) = ctx
                 .router
                 .send(region_id, PeerMsg::CleanupImportSst(ssts.into()))
-                && !ctx.router.is_shutdown()
             {
-                let PeerMsg::CleanupImportSst(ssts) = msg else {
-                    unreachable!()
-                };
-                let mut ssts = ssts.into_vec();
-                ssts.retain(|sst| {
-                    for range in &ranges {
-                        if range_overlaps(range, sst.get_range()) {
-                            return false;
+                if !ctx.router.is_shutdown() {
+                    let PeerMsg::CleanupImportSst(ssts) = msg else {
+                        unreachable!()
+                    };
+                    let mut ssts = ssts.into_vec();
+                    ssts.retain(|sst| {
+                        for range in &ranges {
+                            if range_overlaps(range, sst.get_range()) {
+                                return false;
+                            }
                         }
-                    }
-                    true
-                });
-                let _ = ctx
-                    .schedulers
-                    .tablet
-                    .schedule(tablet::Task::CleanupImportSst(ssts.into()));
+                        true
+                    });
+                    let _ = ctx
+                        .schedulers
+                        .tablet
+                        .schedule(tablet::Task::CleanupImportSst(ssts.into()));
+                }
             }
         }
 

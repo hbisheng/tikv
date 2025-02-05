@@ -242,9 +242,10 @@ fn check_if_to_peer_destroyed<ER: RaftEngine>(
         return Ok(true);
     }
     if let Some(local_peer) = find_peer(local_state.get_region(), store_id)
-        && to_peer.id <= local_peer.get_id()
     {
-        return Ok(true);
+        if to_peer.id <= local_peer.get_id() {
+            return Ok(true);
+        }
     }
     // If the peer is destroyed by conf change, all above checks will pass.
     if local_state

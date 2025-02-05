@@ -43,7 +43,7 @@ impl<T: Default> CoreLocalArray<T> {
     // inaccuracy is tolerable, as the thread may migrate to a different core.
     fn access_element_and_index(&self) -> (&T, usize) {
         let core_id = physical_core_id();
-        let idx = if core::intrinsics::unlikely(core_id < 0) {
+        let idx = if core_id < 0 {
             rand::thread_rng().gen_range(0..(1 << self.size_shift))
         } else {
             core_id as usize & ((1 << self.size_shift) - 1)
