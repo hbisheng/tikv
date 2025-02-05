@@ -6,10 +6,8 @@
 //! [`RocksEngine`](RocksEngine) are used for testing only.
 
 #![feature(bound_map)]
-#![feature(min_specialization)]
 #![feature(type_alias_impl_trait)]
 #![feature(impl_trait_in_assoc_type)]
-#![feature(associated_type_defaults)]
 
 #[macro_use(fail_point)]
 extern crate fail;

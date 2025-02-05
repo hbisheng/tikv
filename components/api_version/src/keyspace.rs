@@ -25,7 +25,8 @@ impl KvPair for (Vec<u8>, Vec<u8>) {
 }
 
 pub trait Keyspace {
-    type KvPair: KvPair = (Vec<u8>, Vec<u8>);
+    // type KvPair: KvPair = (Vec<u8>, Vec<u8>);
+    type KvPair;
     fn make_kv_pair(p: (Vec<u8>, Vec<u8>)) -> Result<Self::KvPair>;
     fn parse_keyspace(key: &[u8]) -> Result<(Option<KeyspaceId>, &[u8])> {
         Ok((None, key))
@@ -42,12 +43,16 @@ impl From<u32> for KeyspaceId {
 }
 
 impl Keyspace for ApiV1 {
+    type KvPair = (Vec<u8>, Vec<u8>);
+
     fn make_kv_pair(p: (Vec<u8>, Vec<u8>)) -> Result<Self::KvPair> {
         Ok(p)
     }
 }
 
 impl Keyspace for ApiV1Ttl {
+    type KvPair = (Vec<u8>, Vec<u8>);
+    
     fn make_kv_pair(p: (Vec<u8>, Vec<u8>)) -> Result<Self::KvPair> {
         Ok(p)
     }

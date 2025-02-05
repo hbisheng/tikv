@@ -23,7 +23,6 @@
 
 
 #![feature(array_windows)]
-#![feature(div_duration)]
 #![feature(box_into_inner)]
 
 #![feature(option_get_or_insert_default)]
