@@ -249,7 +249,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
         Ok(())
     }
 
-    type WriteRes = Box<dyn Stream<Item = crate::WriteEvent> + Send + 'static>;
+    type WriteRes = Pin<Box<dyn Stream<Item = crate::WriteEvent> + Send + 'static>>;
     fn async_write(
         &self,
         _ctx: &Context,
@@ -283,7 +283,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
             Ok(())
         })();
         let mut res = Some(res);
-        Box::new(stream::poll_fn(move |cx| {
+        Box::pin(stream::poll_fn(move |cx| {
             if res.as_ref().map_or(false, |r| r.is_err()) {
                 return Poll::Ready(res.take().map(WriteEvent::Finished));
             }
@@ -293,7 +293,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
         }))
     }
 
-    type SnapshotRes = Box<dyn Future<Output = Result<Self::Snap>> + Send>;
+    type SnapshotRes = Pin<Box<dyn Future<Output = Result<Self::Snap>> + Send>>;
     fn async_snapshot(&mut self, _: SnapContext<'_>) -> Self::SnapshotRes {
         let res = (|| {
             fail_point!("rockskv_async_snapshot", |_| Err(box_err!(
@@ -309,7 +309,7 @@ impl<RE: RaftExtension + 'static> Engine for RocksEngine<RE> {
             Ok(rx)
         })();
 
-        Box::new(async move { Ok(res?.await.unwrap()) })
+        Box::pin(async move { Ok(res?.await.unwrap()) })
     }
 
     type IMSnap = Self::Snap;

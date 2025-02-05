@@ -1,6 +1,7 @@
 // Copyright 2018 TiKV Project Authors. Licensed under Apache-2.0.
 
 use std::{
+    pin::Pin,
     collections::{
         BTreeMap,
         Bound::{self, Excluded, Included, Unbounded},
@@ -90,7 +91,7 @@ impl Engine for BTreeEngine {
         unimplemented!();
     }
 
-    type WriteRes = Box<dyn Stream<Item = WriteEvent> + Send>;
+    type WriteRes = Pin<Box<dyn Stream<Item = WriteEvent> + Send>>;
     fn async_write(
         &self,
         _ctx: &Context,
@@ -104,14 +105,14 @@ impl Engine for BTreeEngine {
             write_modifies(self, batch.modifies)
         };
 
-        Box::new(stream::once(future::ready(WriteEvent::Finished(res))))
+        Box::pin(stream::once(future::ready(WriteEvent::Finished(res))))
     }
 
-    type SnapshotRes = Box<dyn Future<Output = EngineResult<Self::Snap>> + Send>;
+    type SnapshotRes = Pin<Box<dyn Future<Output = EngineResult<Self::Snap>> + Send>>;
     /// warning: It returns a fake snapshot whose content will be affected by
     /// the later modifies!
     fn async_snapshot(&mut self, _ctx: SnapContext<'_>) -> Self::SnapshotRes {
-        Box::new(futures::future::ready(Ok(BTreeEngineSnapshot::new(self))))
+        Box::pin(futures::future::ready(Ok(BTreeEngineSnapshot::new(self))))
     }
 
     type IMSnap = Self::Snap;
