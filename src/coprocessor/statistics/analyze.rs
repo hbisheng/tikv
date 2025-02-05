@@ -584,129 +584,135 @@ impl SampleBuilder {
     pub(crate) async fn collect_columns_stats(
         &mut self,
     ) -> Result<(AnalyzeColumnsResult, Option<AnalyzeIndexResult>)> {
-        use tidb_query_datatype::{codec::collation::Collator, match_template_collator};
-        // The number of columns need to be sampled is `columns_without_handle_len`.
-        // It equals to `columns_info.len()` if the first column doesn't contain a
-        // handle. Otherwise, it equals to `columns_info.len() - 1`.
-        let columns_without_handle_len =
-            self.columns_info.len() - self.columns_info[0].get_pk_handle() as usize;
-
-        let mut pk_hist = Histogram::new(self.max_bucket_size);
-        let mut collectors = vec![
-            SampleCollector::new(
-                self.max_sample_size,
-                self.max_fm_sketch_size,
-                self.cm_sketch_depth,
-                self.cm_sketch_width,
-            );
-            columns_without_handle_len
-        ];
-        let mut is_drained = false;
-        let mut common_handle_hist = Histogram::new(self.max_bucket_size);
-        let mut common_handle_cms = CmSketch::new(self.cm_sketch_depth, self.cm_sketch_width);
-        let mut common_handle_fms = FmSketch::new(self.max_fm_sketch_size);
-        let mut ctx = EvalContext::default();
-        while !is_drained {
-            let result = self.data.next_batch(BATCH_MAX_SIZE).await;
-            is_drained = result.is_drained?.stop();
-
-            let mut columns_slice = result.physical_columns.as_slice();
-            let mut columns_info = &self.columns_info[..];
-            if columns_without_handle_len + 1 == columns_slice.len() {
-                for logical_row in &result.logical_rows {
-                    let mut data = vec![];
-                    columns_slice[0].encode(*logical_row, &columns_info[0], &mut ctx, &mut data)?;
-                    pk_hist.append(&data, false);
-                }
-                columns_slice = &columns_slice[1..];
-                columns_info = &columns_info[1..];
-            }
-
-            if self.analyze_common_handle {
-                for logical_row in &result.logical_rows {
-                    let mut data = vec![];
-                    for i in 0..self.common_handle_col_ids.len() {
-                        let mut handle_col_val = vec![];
-                        columns_slice[i].encode(
-                            *logical_row,
-                            &columns_info[i],
-                            &mut ctx,
-                            &mut handle_col_val,
-                        )?;
-                        data.extend_from_slice(&handle_col_val);
-                        if let Some(common_handle_cms) = common_handle_cms.as_mut() {
-                            common_handle_cms.insert(&data);
-                        }
-                    }
-                    common_handle_fms.insert(&data);
-                    common_handle_hist.append(&data, false)
-                }
-            }
-
-            for (i, collector) in collectors.iter_mut().enumerate() {
-                for logical_row in &result.logical_rows {
-                    let mut val = vec![];
-                    columns_slice[i].encode(*logical_row, &columns_info[i], &mut ctx, &mut val)?;
-
-                    // This is a workaround for different encoding methods used by TiDB and TiKV for
-                    // CM Sketch. We need this because we must ensure we are using the same encoding
-                    // method when we are querying values from CM Sketch (in TiDB) and inserting
-                    // values into CM Sketch (here).
-                    // We are inserting raw bytes from TableScanExecutor into CM Sketch here and
-                    // query CM Sketch using bytes encoded by tablecodec.EncodeValue() in TiDB.
-                    // Their results are different after row format becomes ver 2.
-                    //
-                    // Here we:
-                    // - convert INT bytes to VAR_INT bytes
-                    // - convert UINT bytes to VAR_UINT bytes
-                    // - "flatten" the duration value from DURATION bytes into i64 value, then
-                    //   convert it to VAR_INT bytes.
-                    // These are the only 3 cases we need to care about according to TiDB's
-                    // tablecodec.EncodeValue() and TiKV's V1CompatibleEncoder::write_v2_as_datum().
-                    val = match val[0] {
-                        INT_FLAG | UINT_FLAG | DURATION_FLAG => {
-                            let mut mut_val = &val[..];
-                            let decoded_val = mut_val.read_datum()?;
-                            let flattened = table::flatten(&mut ctx, decoded_val)?;
-                            encode_value(&mut ctx, &[flattened])?
-                        }
-                        _ => val,
-                    };
-
-                    if columns_info[i].as_accessor().is_string_like() {
-                        let sorted_val = match_template_collator! {
-                            TT, match columns_info[i].as_accessor().collation()? {
-                                Collation::TT => {
-                                    let mut mut_val = &val[..];
-                                    let decoded_val = table::decode_col_value(&mut mut_val, &mut ctx, &columns_info[i])?;
-                                    if decoded_val == Datum::Null {
-                                        val
-                                    } else {
-                                        // Only if the `decoded_val` is Datum::Null, `decoded_val` is a Ok(None).
-                                        // So it is safe the unwrap the Ok value.
-                                        let decoded_sorted_val = TT::sort_key(&decoded_val.as_string()?.unwrap().into_owned())?;
-                                        encode_value(&mut ctx, &[Datum::Bytes(decoded_sorted_val)])?
-                                    }
-                                }
-                            }
-                        };
-                        collector.collect(sorted_val);
-                        continue;
-                    }
-                    collector.collect(val);
-                }
-            }
-        }
-        let idx_res = if self.analyze_common_handle {
-            Some(AnalyzeIndexResult::new(
-                common_handle_hist,
-                common_handle_cms,
-                Some(common_handle_fms),
-            ))
-        } else {
-            None
-        };
+        // Dummy implementation
+        let collectors = vec![];
+        let pk_hist = Histogram::new(0);
+        let idx_res = None;
         Ok((AnalyzeColumnsResult::new(collectors, pk_hist), idx_res))
+    
+        // use tidb_query_datatype::{codec::collation::Collator, match_template_collator};
+        // // The number of columns need to be sampled is `columns_without_handle_len`.
+        // // It equals to `columns_info.len()` if the first column doesn't contain a
+        // // handle. Otherwise, it equals to `columns_info.len() - 1`.
+        // let columns_without_handle_len =
+        //     self.columns_info.len() - self.columns_info[0].get_pk_handle() as usize;
+
+        // let mut pk_hist = Histogram::new(self.max_bucket_size);
+        // let mut collectors = vec![
+        //     SampleCollector::new(
+        //         self.max_sample_size,
+        //         self.max_fm_sketch_size,
+        //         self.cm_sketch_depth,
+        //         self.cm_sketch_width,
+        //     );
+        //     columns_without_handle_len
+        // ];
+        // let mut is_drained = false;
+        // let mut common_handle_hist = Histogram::new(self.max_bucket_size);
+        // let mut common_handle_cms = CmSketch::new(self.cm_sketch_depth, self.cm_sketch_width);
+        // let mut common_handle_fms = FmSketch::new(self.max_fm_sketch_size);
+        // let mut ctx = EvalContext::default();
+        // while !is_drained {
+        //     let result = self.data.next_batch(BATCH_MAX_SIZE).await;
+        //     is_drained = result.is_drained?.stop();
+
+        //     let mut columns_slice = result.physical_columns.as_slice();
+        //     let mut columns_info = &self.columns_info[..];
+        //     if columns_without_handle_len + 1 == columns_slice.len() {
+        //         for logical_row in &result.logical_rows {
+        //             let mut data = vec![];
+        //             columns_slice[0].encode(*logical_row, &columns_info[0], &mut ctx, &mut data)?;
+        //             pk_hist.append(&data, false);
+        //         }
+        //         columns_slice = &columns_slice[1..];
+        //         columns_info = &columns_info[1..];
+        //     }
+
+        //     if self.analyze_common_handle {
+        //         for logical_row in &result.logical_rows {
+        //             let mut data = vec![];
+        //             for i in 0..self.common_handle_col_ids.len() {
+        //                 let mut handle_col_val = vec![];
+        //                 columns_slice[i].encode(
+        //                     *logical_row,
+        //                     &columns_info[i],
+        //                     &mut ctx,
+        //                     &mut handle_col_val,
+        //                 )?;
+        //                 data.extend_from_slice(&handle_col_val);
+        //                 if let Some(common_handle_cms) = common_handle_cms.as_mut() {
+        //                     common_handle_cms.insert(&data);
+        //                 }
+        //             }
+        //             common_handle_fms.insert(&data);
+        //             common_handle_hist.append(&data, false)
+        //         }
+        //     }
+
+        //     for (i, collector) in collectors.iter_mut().enumerate() {
+        //         for logical_row in &result.logical_rows {
+        //             let mut val = vec![];
+        //             columns_slice[i].encode(*logical_row, &columns_info[i], &mut ctx, &mut val)?;
+
+        //             // This is a workaround for different encoding methods used by TiDB and TiKV for
+        //             // CM Sketch. We need this because we must ensure we are using the same encoding
+        //             // method when we are querying values from CM Sketch (in TiDB) and inserting
+        //             // values into CM Sketch (here).
+        //             // We are inserting raw bytes from TableScanExecutor into CM Sketch here and
+        //             // query CM Sketch using bytes encoded by tablecodec.EncodeValue() in TiDB.
+        //             // Their results are different after row format becomes ver 2.
+        //             //
+        //             // Here we:
+        //             // - convert INT bytes to VAR_INT bytes
+        //             // - convert UINT bytes to VAR_UINT bytes
+        //             // - "flatten" the duration value from DURATION bytes into i64 value, then
+        //             //   convert it to VAR_INT bytes.
+        //             // These are the only 3 cases we need to care about according to TiDB's
+        //             // tablecodec.EncodeValue() and TiKV's V1CompatibleEncoder::write_v2_as_datum().
+        //             val = match val[0] {
+        //                 INT_FLAG | UINT_FLAG | DURATION_FLAG => {
+        //                     let mut mut_val = &val[..];
+        //                     let decoded_val = mut_val.read_datum()?;
+        //                     let flattened = table::flatten(&mut ctx, decoded_val)?;
+        //                     encode_value(&mut ctx, &[flattened])?
+        //                 }
+        //                 _ => val,
+        //             };
+
+        //             if columns_info[i].as_accessor().is_string_like() {
+        //                 let sorted_val = match_template_collator! {
+        //                     TT, match columns_info[i].as_accessor().collation()? {
+        //                         Collation::TT => {
+        //                             let mut mut_val = &val[..];
+        //                             let decoded_val = table::decode_col_value(&mut mut_val, &mut ctx, &columns_info[i])?;
+        //                             if decoded_val == Datum::Null {
+        //                                 val
+        //                             } else {
+        //                                 // Only if the `decoded_val` is Datum::Null, `decoded_val` is a Ok(None).
+        //                                 // So it is safe the unwrap the Ok value.
+        //                                 let decoded_sorted_val = TT::sort_key(&decoded_val.as_string()?.unwrap().into_owned())?;
+        //                                 encode_value(&mut ctx, &[Datum::Bytes(decoded_sorted_val)])?
+        //                             }
+        //                         }
+        //                     }
+        //                 };
+        //                 collector.collect(sorted_val);
+        //                 continue;
+        //             }
+        //             collector.collect(val);
+        //         }
+        //     }
+        // }
+        // let idx_res = if self.analyze_common_handle {
+        //     Some(AnalyzeIndexResult::new(
+        //         common_handle_hist,
+        //         common_handle_cms,
+        //         Some(common_handle_fms),
+        //     ))
+        // } else {
+        //     None
+        // };
+        // Ok((AnalyzeColumnsResult::new(collectors, pk_hist), idx_res))
     }
 }
 

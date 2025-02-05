@@ -74,14 +74,19 @@ pub trait Scanner: Send {
                     results.push(Ok((k.to_raw()?, v)));
                 }
                 Ok(None) => break,
-                Err(
-                    e @ Error(box ErrorInner::Mvcc(MvccError(box MvccErrorInner::KeyIsLocked {
-                        ..
-                    }))),
-                ) => {
-                    results.push(Err(e));
-                }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // e @ Error(box ErrorInner::Mvcc(MvccError(box MvccErrorInner::KeyIsLocked {
+                    if let Error(ref mvcc_boxed) = e {
+                        if let ErrorInner::Mvcc(MvccError(ref mvcc_inner)) = **mvcc_boxed {
+                            if let MvccErrorInner::KeyIsLocked { .. } = **mvcc_inner {
+                                // If the key is locked, we should return the error to the caller.
+                                results.push(Err(Error::from(e)));
+                                break;
+                            }
+                        }
+                    }
+                    return Err(e)
+                },
             }
         }
         Ok(results)

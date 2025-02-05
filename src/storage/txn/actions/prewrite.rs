@@ -625,10 +625,12 @@ impl<'a> PrewriteMutation<'a> {
                 txn,
             );
             fail_point!("after_calculate_min_commit_ts");
-            if let Err(Error(box ErrorInner::CommitTsTooLarge { .. })) = &res {
-                try_one_pc = false;
-                lock.use_async_commit = false;
-                lock.secondaries = Vec::new();
+            if let Err(Error( ref boxed_err )) = &res {
+                if let ErrorInner::CommitTsTooLarge { .. } = **boxed_err {
+                    try_one_pc = false;
+                    lock.use_async_commit = false;
+                    lock.secondaries = Vec::new();
+                }
             }
             res
         } else {

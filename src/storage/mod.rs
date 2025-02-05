@@ -3805,8 +3805,13 @@ pub mod test_util {
         Box::new(move |x: Result<T>| {
             expect_error(
                 |err| match err {
-                    Error(box ErrorInner::SchedTooBusy) => {}
-                    e => panic!("unexpected error chain: {:?}, expect too busy", e),
+                    Error(ref boxed_err) => {
+                        if let ErrorInner::SchedTooBusy = **boxed_err {
+                            // expected
+                        } else {
+                            panic!("unexpected error: {:?}", err)
+                        }
+                    }
                 },
                 x,
             );

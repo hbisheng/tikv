@@ -223,7 +223,7 @@ where
     L: LockManager,
     K: KvFormat,
 {
-    default fn get_db_from_type(&self, db: DbType) -> Result<&RocksEngine> {
+    fn get_db_from_type(&self, db: DbType) -> Result<&RocksEngine> {
         match db {
             DbType::Kv => Ok(&self.engines.kv),
             DbType::Raft => Err(box_err!("Get raft db is not allowed")),
@@ -232,20 +232,20 @@ where
     }
 }
 
-impl<E, L, K> InnerRocksEngineExtractor for DebuggerImpl<RocksEngine, E, L, K>
-where
-    E: Engine,
-    L: LockManager,
-    K: KvFormat,
-{
-    fn get_db_from_type(&self, db: DbType) -> Result<&RocksEngine> {
-        match db {
-            DbType::Kv => Ok(&self.engines.kv),
-            DbType::Raft => Ok(&self.engines.raft),
-            _ => Err(box_err!("invalid DB type")),
-        }
-    }
-}
+// impl<E, L, K> InnerRocksEngineExtractor for DebuggerImpl<RocksEngine, E, L, K>
+// where
+//     E: Engine,
+//     L: LockManager,
+//     K: KvFormat,
+// {
+//     fn get_db_from_type(&self, db: DbType) -> Result<&RocksEngine> {
+//         match db {
+//             DbType::Kv => Ok(&self.engines.kv),
+//             DbType::Raft => Ok(&self.engines.raft),
+//             _ => Err(box_err!("invalid DB type")),
+//         }
+//     }
+// }
 
 impl<ER, E, L, K> DebuggerImpl<ER, E, L, K>
 where

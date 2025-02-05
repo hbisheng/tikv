@@ -2123,7 +2123,7 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
     fn dispatch(&mut self, change: ConfigChange) -> Result<(), Box<dyn Error>> {
         self.cfg.update(change.clone())?;
         let change_str = format!("{:?}", change);
-
+        let mut change = change.clone();
         // Separate CF-specific config changes.
         let mut cf_config = Vec::new();
         change.retain(|name, cf_change| {
@@ -2172,7 +2172,7 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
             .iter()
             .find(|(name, _)| *name == "rate_bytes_per_sec")
         {
-            let rate_bytes_per_sec: ReadableSize = (*rate_bytes_config.1).into();
+            let rate_bytes_per_sec: ReadableSize = rate_bytes_config.1.clone().into();
             self.db.set_rate_bytes_per_sec(rate_bytes_per_sec.0 as i64)?;
             change.retain(|name, _| *name != "rate_bytes_per_sec");
         }
@@ -2183,7 +2183,7 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
             .find(|(name, _)| *name == "rate_limiter_auto_tuned")
             
         {
-            let rate_limiter_auto_tuned: bool = (*rate_bytes_config.1).into();
+            let rate_limiter_auto_tuned: bool = rate_bytes_config.1.clone().into();
             self.db.set_rate_limiter_auto_tuned(rate_limiter_auto_tuned)?;
             change.retain(|name, _| *name != "rate_limiter_auto_tuned");
         }
@@ -2194,7 +2194,7 @@ impl<T: ConfigurableDb + Send + Sync> ConfigManager for DbConfigManger<T> {
             .find(|(name, _)| *name == "write_buffer_limit")
             
         {
-            let size: ReadableSize = (*size.1).into();
+            let size: ReadableSize = size.1.clone().into();
             self.db.set_flush_size(size.0 as usize)?;
             change.retain(|name, _| *name != "write_buffer_limit");
         }
