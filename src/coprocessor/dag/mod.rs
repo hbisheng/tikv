@@ -134,7 +134,7 @@ fn handle_qe_response(
     use crate::coprocessor::Error;
 
     let result: tidb_query_common::Result<(SelectResponse, Option<IntervalRange>)> =
-        Err(tidb_query_common::Error::from(ErrorInner::Storage("error".to_string())));
+        Err(tidb_query_common::Error::from(ErrorInner::Storage(StorageError::new("error".to_string()))));
 
     match result {
         Ok((sel_resp, range)) => {

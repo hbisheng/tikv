@@ -31,7 +31,7 @@ use crate::{
     storage::{Snapshot, SnapshotStore},
 };
 
-pub(crate) struct RowSampleBuilder<S: Snapshot, F: KvFormat> {
+pub(crate) struct RowSampleBuilder {
 
     max_sample_size: usize,
     max_fm_sketch_size: usize,
@@ -525,7 +525,7 @@ impl Drop for BaseRowSampleCollector {
     }
 }
 
-pub(crate) struct SampleBuilder<S: Snapshot, F: KvFormat> {
+pub(crate) struct SampleBuilder {
 
     max_bucket_size: usize,
     max_sample_size: usize,

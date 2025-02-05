@@ -91,41 +91,43 @@ impl<S: Snapshot, F: KvFormat> AnalyzeContext<S, F> {
     // it would build a histogram for the primary key(if needed) and
     // collectors for each column value.
     async fn handle_column(builder: &mut SampleBuilder<S, F>) -> Result<Vec<u8>> {
-        let (col_res, _) = builder.collect_columns_stats().await?;
+        // let (col_res, _) = builder.collect_columns_stats().await?;
 
-        let res_data = {
-            let res: tipb::AnalyzeColumnsResp = col_res.into();
-            box_try!(res.write_to_bytes())
-        };
-        Ok(res_data)
+        // let res_data = {
+        //     let res: tipb::AnalyzeColumnsResp = col_res.into();
+        //     box_try!(res.write_to_bytes())
+        // };
+        // Ok(res_data)
+        Ok(Vec::new())
     }
 
     // Handle mixed request, it would build histograms for common handle and columns
     // by scan table rows once.
     // NOTE: Mixed requests are only sent when the statistics version is set to 1.
     async fn handle_mixed(builder: &mut SampleBuilder<S, F>) -> Result<Vec<u8>> {
-        let (col_res, idx_res) = builder.collect_columns_stats().await?;
+        // let (col_res, idx_res) = builder.collect_columns_stats().await?;
 
-        let res_data = {
-            let resp: tipb::AnalyzeMixedResp = AnalyzeMixedResult::new(
-                col_res,
-                idx_res.ok_or_else(|| {
-                    Error::Other("Mixed analyze type should have index response.".into())
-                })?,
-            )
-            .into();
-            box_try!(resp.write_to_bytes())
-        };
-        Ok(res_data)
+        // let res_data = {
+        //     let resp: tipb::AnalyzeMixedResp = AnalyzeMixedResult::new(
+        //         col_res,
+        //         idx_res.ok_or_else(|| {
+        //             Error::Other("Mixed analyze type should have index response.".into())
+        //         })?,
+        //     )
+        //     .into();
+        //     box_try!(resp.write_to_bytes())
+        // };
+        // Ok(res_data)
+        Ok(Vec::new())
     }
 
     async fn handle_full_sampling(builder: &mut RowSampleBuilder<S, F>) -> Result<Vec<u8>> {
-        let sample_res = builder.collect_column_stats().await?;
-        let res_data = {
-            let res: tipb::AnalyzeColumnsResp = sample_res.into();
-            box_try!(res.write_to_bytes())
-        };
-        Ok(res_data)
+        // let sample_res = builder.collect_column_stats().await?;
+        // let res_data = {
+        //     let res: tipb::AnalyzeColumnsResp = sample_res.into();
+        //     box_try!(res.write_to_bytes())
+        // };
+        Ok(Vec::new())
     }
 
     // handle_index is used to handle `AnalyzeIndexReq`,
@@ -135,86 +137,89 @@ impl<S: Snapshot, F: KvFormat> AnalyzeContext<S, F> {
         scanner: &mut RangesScanner<TikvStorage<SnapshotStore<S>>, F>,
         is_common_handle: bool,
     ) -> Result<Vec<u8>> {
-        let mut hist = Histogram::new(req.get_bucket_size() as usize);
-        let mut cms = CmSketch::new(
-            req.get_cmsketch_depth() as usize,
-            req.get_cmsketch_width() as usize,
-        );
-        let mut fms = FmSketch::new(req.get_sketch_size() as usize);
-        let mut topn_heap = BinaryHeap::new();
-        // cur_val recording the current value's data and its counts when iterating
-        // index's rows. Once we met a new value, the old value will be pushed
-        // into the topn_heap to maintain the top-n information.
-        let mut cur_val: (u32, Vec<u8>) = (0, vec![]);
-        let top_n_size = req.get_top_n_size() as usize;
-        let stats_version = if req.has_version() {
-            req.get_version().into()
-        } else {
-            AnalyzeVersion::V1
-        };
-        while let Some(row) = scanner.next().await? {
-            let mut key = row.key();
-            if is_common_handle {
-                table::check_record_key(key)?;
-                key = &key[table::PREFIX_LEN..];
-            } else {
-                table::check_index_key(key)?;
-                key = &key[table::PREFIX_LEN + table::ID_LEN..];
-            }
-            let mut datums = key;
-            let mut data = Vec::with_capacity(key.len());
-            for i in 0..req.get_num_columns() as usize {
-                if datums.is_empty() {
-                    return Err(box_err!(
-                        "{}th column is missing in datum buffer: {}",
-                        i,
-                        log_wrappers::Value::key(key)
-                    ));
-                }
-                let (column, remaining) = split_datum(datums, false)?;
-                datums = remaining;
-                data.extend_from_slice(column);
-                if let Some(cms) = cms.as_mut() {
-                    cms.insert(&data);
-                }
-            }
-            fms.insert(&data);
-            if stats_version == AnalyzeVersion::V2 {
-                hist.append(&data, true);
-                if cur_val.1 == data {
-                    cur_val.0 += 1;
-                } else {
-                    if cur_val.0 > 0 {
-                        topn_heap.push(Reverse(cur_val));
-                    }
-                    if topn_heap.len() > top_n_size {
-                        topn_heap.pop();
-                    }
-                    cur_val = (1, data);
-                }
-            } else {
-                hist.append(&data, false);
-            }
-        }
+        // Dummy return value
+        Ok(Vec::new())
 
-        if stats_version == AnalyzeVersion::V2 {
-            if cur_val.0 > 0 {
-                topn_heap.push(Reverse(cur_val));
-                if topn_heap.len() > top_n_size {
-                    topn_heap.pop();
-                }
-            }
-            if let Some(c) = cms.as_mut() {
-                for heap_item in topn_heap {
-                    c.sub(&(heap_item.0).1, (heap_item.0).0);
-                    c.push_to_top_n((heap_item.0).1, (heap_item.0).0 as u64);
-                }
-            }
-        }
+        // let mut hist = Histogram::new(req.get_bucket_size() as usize);
+        // let mut cms = CmSketch::new(
+        //     req.get_cmsketch_depth() as usize,
+        //     req.get_cmsketch_width() as usize,
+        // );
+        // let mut fms = FmSketch::new(req.get_sketch_size() as usize);
+        // let mut topn_heap = BinaryHeap::new();
+        // // cur_val recording the current value's data and its counts when iterating
+        // // index's rows. Once we met a new value, the old value will be pushed
+        // // into the topn_heap to maintain the top-n information.
+        // let mut cur_val: (u32, Vec<u8>) = (0, vec![]);
+        // let top_n_size = req.get_top_n_size() as usize;
+        // let stats_version = if req.has_version() {
+        //     req.get_version().into()
+        // } else {
+        //     AnalyzeVersion::V1
+        // };
+        // while let Some(row) = scanner.next().await? {
+        //     let mut key = row.key();
+        //     if is_common_handle {
+        //         table::check_record_key(key)?;
+        //         key = &key[table::PREFIX_LEN..];
+        //     } else {
+        //         table::check_index_key(key)?;
+        //         key = &key[table::PREFIX_LEN + table::ID_LEN..];
+        //     }
+        //     let mut datums = key;
+        //     let mut data = Vec::with_capacity(key.len());
+        //     for i in 0..req.get_num_columns() as usize {
+        //         if datums.is_empty() {
+        //             return Err(box_err!(
+        //                 "{}th column is missing in datum buffer: {}",
+        //                 i,
+        //                 log_wrappers::Value::key(key)
+        //             ));
+        //         }
+        //         let (column, remaining) = split_datum(datums, false)?;
+        //         datums = remaining;
+        //         data.extend_from_slice(column);
+        //         if let Some(cms) = cms.as_mut() {
+        //             cms.insert(&data);
+        //         }
+        //     }
+        //     fms.insert(&data);
+        //     if stats_version == AnalyzeVersion::V2 {
+        //         hist.append(&data, true);
+        //         if cur_val.1 == data {
+        //             cur_val.0 += 1;
+        //         } else {
+        //             if cur_val.0 > 0 {
+        //                 topn_heap.push(Reverse(cur_val));
+        //             }
+        //             if topn_heap.len() > top_n_size {
+        //                 topn_heap.pop();
+        //             }
+        //             cur_val = (1, data);
+        //         }
+        //     } else {
+        //         hist.append(&data, false);
+        //     }
+        // }
 
-        let res: tipb::AnalyzeIndexResp = AnalyzeIndexResult::new(hist, cms, Some(fms)).into();
-        let dt = box_try!(res.write_to_bytes());
-        Ok(dt)
+        // if stats_version == AnalyzeVersion::V2 {
+        //     if cur_val.0 > 0 {
+        //         topn_heap.push(Reverse(cur_val));
+        //         if topn_heap.len() > top_n_size {
+        //             topn_heap.pop();
+        //         }
+        //     }
+        //     if let Some(c) = cms.as_mut() {
+        //         for heap_item in topn_heap {
+        //             c.sub(&(heap_item.0).1, (heap_item.0).0);
+        //             c.push_to_top_n((heap_item.0).1, (heap_item.0).0 as u64);
+        //         }
+        //     }
+        // }
+
+        // let res: tipb::AnalyzeIndexResp = AnalyzeIndexResult::new(hist, cms, Some(fms)).into();
+        // let dt = box_try!(res.write_to_bytes());
+        // Ok(dt)
     }
 }
 
@@ -246,46 +251,18 @@ impl<S: Snapshot, F: KvFormat> RequestHandler for AnalyzeContext<S, F> {
                 res
             }
 
-            AnalyzeType::TypeColumn => {
-                let col_req = self.req.take_col_req();
-                let storage = self.storage.take().unwrap();
-                let ranges = std::mem::take(&mut self.ranges);
-                let mut builder = SampleBuilder::<_, F>::new(col_req, None, storage, ranges)?;
-                let res = AnalyzeContext::handle_column(&mut builder).await;
-                // builder.data.collect_storage_stats(&mut self.storage_stats);
-                res
-            }
+            AnalyzeType::TypeColumn => Err(Error::Other(
+                "Analyze of this kind not implemented".to_string(),
+            )),
 
             // Type mixed is analyze common handle and columns by scan table rows once.
-            AnalyzeType::TypeMixed => {
-                let col_req = self.req.take_col_req();
-                let idx_req = self.req.take_idx_req();
-                let storage = self.storage.take().unwrap();
-                let ranges = std::mem::take(&mut self.ranges);
-                let mut builder =
-                    SampleBuilder::<_, F>::new(col_req, Some(idx_req), storage, ranges)?;
-                let res = AnalyzeContext::handle_mixed(&mut builder).await;
-                // builder.data.collect_storage_stats(&mut self.storage_stats);
-                res
-            }
+            AnalyzeType::TypeMixed => Err(Error::Other(
+                "Analyze of this kind not implemented".to_string(),
+            )),
 
-            AnalyzeType::TypeFullSampling => {
-                let col_req = self.req.take_col_req();
-                let storage = self.storage.take().unwrap();
-                let ranges = std::mem::take(&mut self.ranges);
-
-                let mut builder = RowSampleBuilder::<_, F>::new(
-                    col_req,
-                    storage,
-                    ranges,
-                    self.quota_limiter.clone(),
-                    self.is_auto_analyze,
-                )?;
-
-                let res = AnalyzeContext::handle_full_sampling(&mut builder).await;
-                // builder.data.collect_storage_stats(&mut self.storage_stats);
-                res
-            }
+            AnalyzeType::TypeFullSampling => Err(Error::Other(
+                "Analyze of this kind not implemented".to_string(),
+            )),
 
             AnalyzeType::TypeSampleIndex => Err(Error::Other(
                 "Analyze of this kind not implemented".to_string(),
