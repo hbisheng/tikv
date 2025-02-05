@@ -252,7 +252,7 @@ impl<S: Snapshot, F: KvFormat> RequestHandler for AnalyzeContext<S, F> {
                 let ranges = std::mem::take(&mut self.ranges);
                 let mut builder = SampleBuilder::<_, F>::new(col_req, None, storage, ranges)?;
                 let res = AnalyzeContext::handle_column(&mut builder).await;
-                builder.data.collect_storage_stats(&mut self.storage_stats);
+                // builder.data.collect_storage_stats(&mut self.storage_stats);
                 res
             }
 
@@ -265,7 +265,7 @@ impl<S: Snapshot, F: KvFormat> RequestHandler for AnalyzeContext<S, F> {
                 let mut builder =
                     SampleBuilder::<_, F>::new(col_req, Some(idx_req), storage, ranges)?;
                 let res = AnalyzeContext::handle_mixed(&mut builder).await;
-                builder.data.collect_storage_stats(&mut self.storage_stats);
+                // builder.data.collect_storage_stats(&mut self.storage_stats);
                 res
             }
 
@@ -283,7 +283,7 @@ impl<S: Snapshot, F: KvFormat> RequestHandler for AnalyzeContext<S, F> {
                 )?;
 
                 let res = AnalyzeContext::handle_full_sampling(&mut builder).await;
-                builder.data.collect_storage_stats(&mut self.storage_stats);
+                // builder.data.collect_storage_stats(&mut self.storage_stats);
                 res
             }
 

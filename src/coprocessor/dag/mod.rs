@@ -110,31 +110,31 @@ impl BatchDagHandler {
 #[async_trait]
 impl RequestHandler for BatchDagHandler {
     async fn handle_request(&mut self) -> Result<MemoryTraceGuard<Response>> {
-        let result = self.runner.handle_request().await;
-        handle_qe_response(result, self.runner.can_be_cached(), self.data_version).map(|x| x.into())
+        handle_qe_response(self.data_version).map(|x| x.into())
     }
 
     async fn handle_streaming_request(&mut self) -> Result<(Option<Response>, bool)> {
-        handle_qe_stream_response(self.runner.handle_streaming_request().await)
+        handle_qe_stream_response(Ok((None, true)))
     }
 
     fn collect_scan_statistics(&mut self, dest: &mut Statistics) {
-        self.runner.collect_storage_stats(dest);
+        // self.runner.collect_storage_stats(dest);
     }
 
     fn collect_scan_summary(&mut self, dest: &mut ExecSummary) {
-        self.runner.collect_scan_summary(dest);
+        // self.runner.collect_scan_summary(dest);
     }
 }
 
 fn handle_qe_response(
-    result: tidb_query_common::Result<(SelectResponse, Option<IntervalRange>)>,
-    can_be_cached: bool,
     data_version: Option<u64>,
 ) -> Result<Response> {
     use tidb_query_common::error::{ErrorInner, EvaluateError};
 
     use crate::coprocessor::Error;
+
+    let result: tidb_query_common::Result<(SelectResponse, Option<IntervalRange>)> =
+        Err(tidb_query_common::Error::from(ErrorInner::Storage("error".to_string())));
 
     match result {
         Ok((sel_resp, range)) => {
@@ -144,7 +144,7 @@ fn handle_qe_response(
                 resp.mut_range().set_end(range.upper_exclusive);
             }
             resp.set_data(box_try!(sel_resp.write_to_bytes()));
-            resp.set_can_be_cached(can_be_cached);
+            resp.set_can_be_cached(false);
             resp.set_is_cache_hit(false);
             if let Some(v) = data_version {
                 resp.set_cache_last_version(v);
@@ -160,7 +160,7 @@ fn handle_qe_response(
                 sel_resp.mut_error().set_code(err.code());
                 sel_resp.mut_error().set_msg(err.to_string());
                 resp.set_data(box_try!(sel_resp.write_to_bytes()));
-                resp.set_can_be_cached(can_be_cached);
+                resp.set_can_be_cached(false);
                 resp.set_is_cache_hit(false);
                 Ok(resp)
             }

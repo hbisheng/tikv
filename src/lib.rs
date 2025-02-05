@@ -21,7 +21,6 @@
 #![recursion_limit = "400"]
 
 
-#![feature(extract_if)]
 #![feature(deadline_api)]
 
 #![feature(read_buf)]
@@ -29,8 +28,6 @@
 
 #![allow(incomplete_features)]
 #![feature(core_io_borrowed_buf)]
-
-#![feature(associated_type_bounds)]
 
 #[macro_use(fail_point)]
 extern crate fail;

@@ -55,18 +55,18 @@ impl<S: Snapshot, F: KvFormat> RowSampleBuilder<S, F> {
             return Err(box_err!("empty columns_info"));
         }
         let common_handle_ids = req.take_primary_column_ids();
-        let table_scanner = BatchTableScanExecutor::new(
-            storage,
-            Arc::new(EvalConfig::default()),
-            columns_info.clone(),
-            ranges,
-            common_handle_ids,
-            false,
-            false, // Streaming mode is not supported in Analyze request, always false here
-            req.take_primary_prefix_column_ids(),
-        )?;
+        // let table_scanner = BatchTableScanExecutor::new(
+        //     storage,
+        //     Arc::new(EvalConfig::default()),
+        //     columns_info.clone(),
+        //     ranges,
+        //     common_handle_ids,
+        //     false,
+        //     false, // Streaming mode is not supported in Analyze request, always false here
+        //     req.take_primary_prefix_column_ids(),
+        // )?;
         Ok(Self {
-            data: table_scanner,
+            // data: table_scanner,
             max_sample_size: req.get_sample_size() as usize,
             max_fm_sketch_size: req.get_sketch_size() as usize,
             sample_rate: req.get_sample_rate(),
@@ -554,16 +554,16 @@ impl<S: Snapshot, F: KvFormat> SampleBuilder<S, F> {
             return Err(box_err!("empty columns_info"));
         }
         let common_handle_ids = req.take_primary_column_ids();
-        let table_scanner = BatchTableScanExecutor::new(
-            storage,
-            Arc::new(EvalConfig::default()),
-            columns_info.clone(),
-            ranges,
-            common_handle_ids.clone(),
-            false,
-            false, // Streaming mode is not supported in Analyze request, always false here
-            req.take_primary_prefix_column_ids(),
-        )?;
+        // let table_scanner = BatchTableScanExecutor::new(
+        //     storage,
+        //     Arc::new(EvalConfig::default()),
+        //     columns_info.clone(),
+        //     ranges,
+        //     common_handle_ids.clone(),
+        //     false,
+        //     false, // Streaming mode is not supported in Analyze request, always false here
+        //     req.take_primary_prefix_column_ids(),
+        // )?;
         Ok(Self {
             max_bucket_size: req.get_bucket_size() as usize,
             max_fm_sketch_size: req.get_sketch_size() as usize,

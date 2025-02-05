@@ -619,8 +619,11 @@ impl WriteCompactionFilter {
             .with_label_values(&[STAT_TXN_KEYMODE, "generated"])
             .inc_by(self.orphan_versions as u64);
         if let Some((versions, filtered)) = STATS.with(|stats| {
-            stats.versions.update(|x| x + self.total_versions);
-            stats.filtered.update(|x| x + self.total_filtered);
+            let c = stats.versions.get();
+            stats.versions.set(c + self.total_versions);
+
+            let cc = stats.filtered.get(); 
+            stats.filtered.set(cc + self.total_filtered);
             if stats.need_report() {
                 return Some(stats.prepare_report());
             }

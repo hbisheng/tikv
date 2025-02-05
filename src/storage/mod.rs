@@ -56,12 +56,11 @@ pub(crate) mod metrics;
 pub mod mvcc;
 pub mod raw;
 pub mod txn;
-
+use crate::storage::kv::FakeExtension;
 mod read_pool;
 mod types;
 
 use std::{
-    assert_matches::assert_matches,
     borrow::Cow,
     iter,
     marker::PhantomData,
@@ -3457,6 +3456,7 @@ pub struct TxnTestEngine<E: Engine> {
 }
 
 impl<E: Engine> Engine for TxnTestEngine<E> {
+    type RaftExtension = FakeExtension;
     type Snap = TxnTestSnapshot<E::Snap>;
     type Local = E::Local;
 
