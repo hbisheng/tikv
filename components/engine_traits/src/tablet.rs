@@ -238,10 +238,28 @@ impl<EK> TabletRegistry<EK> {
     /// Returns the prefix, id and suffix of the tablet name.
     pub fn parse_tablet_name<'a>(&self, path: &'a Path) -> Option<(&'a str, u64, u64)> {
         let name = path.file_name().unwrap().to_str().unwrap();
-        let mut parts = name.rsplit('_');
-        let suffix = parts.next()?.parse().ok()?;
-        let id = parts.next()?.parse().ok()?;
-        let prefix = parts.remainder().unwrap_or("");
+
+
+        // let mut parts = name.rsplit('_');
+        // let suffix = parts.next()?.parse().ok()?;
+        // let id = parts.next()?.parse().ok()?;
+        // let prefix = parts.remainder().unwrap_or("");
+
+        // Find the last underscore to separate the suffix.
+        let last_us = name.rfind('_')?;
+        let suffix_str = &name[last_us + 1..];
+        let suffix = suffix_str.parse().ok()?;
+    
+        // Now, work with the remaining part for the id.
+        let rest = &name[..last_us];
+        // Find the last underscore in the rest to separate the id.
+        let second_last_us = rest.rfind('_')?;
+        let id_str = &rest[second_last_us + 1..];
+        let id = id_str.parse().ok()?;
+    
+        // The prefix is everything before the second last underscore.
+        let prefix = &rest[..second_last_us];
+
         Some((prefix, id, suffix))
     }
 

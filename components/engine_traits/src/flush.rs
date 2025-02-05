@@ -13,6 +13,7 @@
 //! be used as the start state.
 
 use std::{
+    mem,
     collections::LinkedList,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -267,24 +268,50 @@ impl PersistenceListener {
                 return;
             }
             prs.last_flushed[offset] = largest_seqno;
-            let mut cursor = prs.prs.cursor_front_mut();
-            let mut flushed_pr = None;
-            while let Some(pr) = cursor.current() {
+
+            // let mut cursor = prs.prs.cursor_front_mut();
+            // let mut flushed_pr = None;
+            // while let Some(pr) = cursor.current() {
+            //     if pr.cf != cf {
+            //         cursor.move_next();
+            //         continue;
+            //     }
+            //     if pr.smallest_seqno <= largest_seqno {
+            //         match &mut flushed_pr {
+            //             None => flushed_pr = cursor.remove_current(),
+            //             Some(flushed_pr) => {
+            //                 flushed_pr.merge(cursor.remove_current().unwrap());
+            //             }
+            //         }
+            //         continue;
+            //     }
+            //     break;
+            // }
+
+            // First round, extract all matching elements.
+            // Second round, build the flushed pr. 
+            let mut remaining = Vec::with_capacity(prs.prs.len());
+            let mut flushed_pr: Option<ApplyProgress> = None;
+            let old_list: LinkedList<_> = mem::take(&mut prs.prs);
+            for pr in old_list.into_iter() {
                 if pr.cf != cf {
-                    cursor.move_next();
-                    continue;
-                }
-                if pr.smallest_seqno <= largest_seqno {
-                    match &mut flushed_pr {
-                        None => flushed_pr = cursor.remove_current(),
-                        Some(flushed_pr) => {
-                            flushed_pr.merge(cursor.remove_current().unwrap());
+                    remaining.push(pr);
+                } else if pr.smallest_seqno <= largest_seqno {
+                    // Merge all matching records.
+                    flushed_pr = match flushed_pr {
+                        None => Some(pr),
+                        Some(mut existing) => {
+                            existing.merge(pr);
+                            Some(existing)
                         }
-                    }
-                    continue;
+                    };
+                } else {
+                    remaining.push(pr);
                 }
-                break;
             }
+            // Rebuild the linked list from the remaining items.
+            prs.prs = remaining.into_iter().collect();
+
             match flushed_pr {
                 Some(pr) => pr,
                 None => {

@@ -25,7 +25,7 @@
 #![feature(array_windows)]
 #![feature(div_duration)]
 #![feature(box_into_inner)]
-#![feature(assert_matches)]
+
 #![feature(option_get_or_insert_default)]
 
 mod batch;

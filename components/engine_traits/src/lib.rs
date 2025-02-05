@@ -249,10 +249,6 @@
 //!   `engine_traits` and reexported from `engine` to ease the transition.
 //!   Likewise `engine_rocks` can temporarily call code from inside `engine`.
 #![cfg_attr(test, feature(test))]
-#![feature(assert_matches)]
-#![feature(linked_list_cursors)]
-
-#![feature(str_split_remainder)]
 
 #[macro_use(fail_point)]
 extern crate fail;
