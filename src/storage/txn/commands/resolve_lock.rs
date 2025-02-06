@@ -116,12 +116,11 @@ impl<S: Snapshot, L: LockManager> WriteCommand<S, L> for ResolveLock {
                         known_txn_status.push((current_lock.ts, commit_ts));
                         res
                     }
-                    Err(MvccError(boxed))
-                        if current_lock.is_pessimistic_lock() =>
+                    Err(MvccError(boxed)) if current_lock.is_pessimistic_lock() =>
                     {
                         match *boxed {
                             MvccErrorInner::TxnLockNotFound { .. } => None,
-                            _ => return Err(MvccError(boxed).into());
+                            _ => return Err(MvccError(boxed).into()),
                         }
                     }
                     Err(err) => return Err(err.into()),

@@ -371,7 +371,11 @@ pub fn extract_key_error(err: &Error) -> kvrpcpb::KeyError {
                         KvErrorInner::KeyIsLocked(ref info) => {
                             key_error.set_locked(info.clone());
                         },
-                    },
+                        _ => {
+                            error!(?*err; "txn aborts");
+                            key_error.set_abort(format!("{:?}", err));
+                        }
+                    }
                 },
                 ErrorInner::Txn(TxnError(ref boxed_inner)) => {
                     match **boxed_inner {
@@ -380,7 +384,11 @@ pub fn extract_key_error(err: &Error) -> kvrpcpb::KeyError {
                                 KvErrorInner::KeyIsLocked(ref info) => {
                                     key_error.set_locked(info.clone());
                                 },
-                            },
+                                _ => {
+                                    error!(?*err; "txn aborts");
+                                    key_error.set_abort(format!("{:?}", err));
+                                }
+                            }
                         },
                         TxnErrorInner::Mvcc(MvccError(ref boxed_inner_inner)) => {
                             match **boxed_inner_inner {

@@ -177,21 +177,33 @@ impl From<storage::errors::Error> for PluginErrorShim {
     fn from(error: storage::errors::Error) -> Self {
         let inner = match *error.0 {
             // Key not in region
-            storage::errors::ErrorInner::Kv(KvError(box KvErrorInner::Request(ref req_err)))
-                if req_err.has_key_not_in_region() =>
-            {
-                let key_err = req_err.get_key_not_in_region();
-                PluginError::KeyNotInRegion {
-                    key: key_err.get_key().to_owned(),
-                    region_id: key_err.get_region_id(),
-                    start_key: key_err.get_start_key().to_owned(),
-                    end_key: key_err.get_end_key().to_owned(),
+            storage::errors::ErrorInner::Kv(KvError(ref boxed)) => {
+                match **boxed {
+                    KvErrorInner::Request(ref req_err) if req_err.has_key_not_in_region() => {
+                        let key_err = req_err.get_key_not_in_region();
+                        PluginError::KeyNotInRegion {
+                            key: key_err.get_key().to_owned(),
+                            region_id: key_err.get_region_id(),
+                            start_key: key_err.get_start_key().to_owned(),
+                            end_key: key_err.get_end_key().to_owned(),
+                        }
+                    }
+                    _ => PluginError::Other(
+                        format!("{}", &error),
+                        Box::new(storage::Result::<()>::Err(error)),
+                    ),
                 }
             }
             // Timeout
-            storage::errors::ErrorInner::Kv(KvError(box KvErrorInner::Timeout(duration))) => {
-                PluginError::Timeout(duration)
-            }
+            storage::errors::ErrorInner::Kv(KvError(ref boxed)) => {
+                match **boxed {
+                    KvErrorInner::Timeout(duration) => PluginError::Timeout(duration),
+                    _ => PluginError::Other(
+                        format!("{}", &error),
+                        Box::new(storage::Result::<()>::Err(error)),
+                    ),
+                }
+            },
             // Other errors are passed as-is inside their `Result` so we get a `&Result` when using
             // `Any::downcast_ref`.
             _ => PluginError::Other(

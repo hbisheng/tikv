@@ -76,8 +76,13 @@ impl From<tidb_query_common::Error> for Error {
 impl From<KvError> for Error {
     fn from(err: KvError) -> Self {
         match err {
-            KvError(box KvErrorInner::Request(e)) => Error::Region(e),
-            KvError(box KvErrorInner::KeyIsLocked(lock_info)) => Error::Locked(lock_info),
+            KvError(boxed) => {
+                match *boxed {
+                    KvErrorInner::Request(e) => Error::Region(e),
+                    KvErrorInner::KeyIsLocked(info) => Error::Locked(info),
+                    _ => Error::Other(boxed.to_string()),
+                }
+            }
             e => Error::Other(e.to_string()),
         }
     }
@@ -86,8 +91,13 @@ impl From<KvError> for Error {
 impl From<MvccError> for Error {
     fn from(err: MvccError) -> Self {
         match err {
-            MvccError(box MvccErrorInner::KeyIsLocked(info)) => Error::Locked(info),
-            MvccError(box MvccErrorInner::Kv(kv_error)) => Error::from(kv_error),
+            MvccError(boxed) => {
+                match *boxed {
+                    MvccErrorInner::KeyIsLocked(info) => Error::Locked(info),
+                    MvccErrorInner::Kv(kv_error) => Error::from(kv_error),
+                    _ => Error::Other(boxed.to_string()),
+                }
+            }
             e => Error::Other(e.to_string()),
         }
     }
@@ -96,8 +106,13 @@ impl From<MvccError> for Error {
 impl From<TxnError> for Error {
     fn from(err: storage::txn::Error) -> Self {
         match err {
-            TxnError(box TxnErrorInner::Mvcc(mvcc_error)) => Error::from(mvcc_error),
-            TxnError(box TxnErrorInner::Engine(kv_error)) => Error::from(kv_error),
+            TxnError(boxed) => {
+                match *boxed {
+                    TxnErrorInner::Mvcc(mvcc_error) => Error::from(mvcc_error),
+                    TxnErrorInner::Engine(kv_error) => Error::from(kv_error),
+                    _ => Error::Other(boxed.to_string()),
+                }
+            },
             e => Error::Other(e.to_string()),
         }
     }

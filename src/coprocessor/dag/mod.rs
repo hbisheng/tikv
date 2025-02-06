@@ -133,37 +133,39 @@ fn handle_qe_response(
 
     use crate::coprocessor::Error;
 
-    let result = Ok((SelectResponse::default(), None::<T>));
-    match result {
-        Ok((sel_resp, range)) => {
-            let mut resp = Response::default();
-            if let Some(range) = range {
-                resp.mut_range().set_start(range.lower_inclusive);
-                resp.mut_range().set_end(range.upper_exclusive);
-            }
-            resp.set_data(box_try!(sel_resp.write_to_bytes()));
-            resp.set_can_be_cached(false);
-            resp.set_is_cache_hit(false);
-            if let Some(v) = data_version {
-                resp.set_cache_last_version(v);
-            }
-            Ok(resp)
-        }
-        Err(err) => match *err.0 {
-            ErrorInner::Storage(err) => Err(err.into()),
-            ErrorInner::Evaluate(EvaluateError::DeadlineExceeded) => Err(Error::DeadlineExceeded),
-            ErrorInner::Evaluate(err) => {
-                let mut resp = Response::default();
-                let mut sel_resp = SelectResponse::default();
-                sel_resp.mut_error().set_code(err.code());
-                sel_resp.mut_error().set_msg(err.to_string());
-                resp.set_data(box_try!(sel_resp.write_to_bytes()));
-                resp.set_can_be_cached(false);
-                resp.set_is_cache_hit(false);
-                Ok(resp)
-            }
-        },
-    }
+
+    Ok(Response::default())
+
+    // match result {
+    //     Ok((sel_resp, range)) => {
+    //         let mut resp = Response::default();
+    //         if let Some(range) = range {
+    //             resp.mut_range().set_start(range.lower_inclusive);
+    //             resp.mut_range().set_end(range.upper_exclusive);
+    //         }
+    //         resp.set_data(box_try!(sel_resp.write_to_bytes()));
+    //         resp.set_can_be_cached(false);
+    //         resp.set_is_cache_hit(false);
+    //         if let Some(v) = data_version {
+    //             resp.set_cache_last_version(v);
+    //         }
+    //         Ok(resp)
+    //     }
+    //     Err(err) => match *err.0 {
+    //         ErrorInner::Storage(err) => Err(err.into()),
+    //         ErrorInner::Evaluate(EvaluateError::DeadlineExceeded) => Err(Error::DeadlineExceeded),
+    //         ErrorInner::Evaluate(err) => {
+    //             let mut resp = Response::default();
+    //             let mut sel_resp = SelectResponse::default();
+    //             sel_resp.mut_error().set_code(err.code());
+    //             sel_resp.mut_error().set_msg(err.to_string());
+    //             resp.set_data(box_try!(sel_resp.write_to_bytes()));
+    //             resp.set_can_be_cached(false);
+    //             resp.set_is_cache_hit(false);
+    //             Ok(resp)
+    //         }
+    //     },
+    // }
 }
 
 fn handle_qe_stream_response(

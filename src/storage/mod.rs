@@ -56,6 +56,7 @@ pub(crate) mod metrics;
 pub mod mvcc;
 pub mod raw;
 pub mod txn;
+use std::pin::Pin;
 use crate::storage::kv::FakeExtension;
 mod read_pool;
 mod types;

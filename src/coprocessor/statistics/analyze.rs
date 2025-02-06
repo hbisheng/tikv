@@ -45,7 +45,7 @@ pub(crate) struct RowSampleBuilder {
 impl RowSampleBuilder {
     pub(crate) fn new(
         mut req: AnalyzeColumnsReq,
-        storage: TikvStorage<SnapshotStore<S>>,
+        // storage: TikvStorage<SnapshotStore<S>>,
         ranges: Vec<KeyRange>,
         quota_limiter: Arc<QuotaLimiter>,
         is_auto_analyze: bool,
@@ -546,7 +546,7 @@ impl SampleBuilder {
     pub(crate) fn new(
         mut req: AnalyzeColumnsReq,
         common_handle_req: Option<tipb::AnalyzeIndexReq>,
-        storage: TikvStorage<SnapshotStore<S>>,
+        // storage: TikvStorage<SnapshotStore<S>>,
         ranges: Vec<KeyRange>,
     ) -> Result<Self> {
         let columns_info: Vec<_> = req.take_columns_info().into();

@@ -165,7 +165,7 @@ impl<S: Snapshot, L: LockManager> WriteCommand<S, L> for AcquirePessimisticLockR
                     );
                 }
                 Err(MvccError(boxed)) => {
-                    match *boxes {
+                    match *boxed {
                         MvccErrorInner::KeyIsLocked(lock_info) => {
                             let mut lock_info = WriteResultLockInfo::new(lock_info, params, key, should_not_exist);
                             lock_info.lock_wait_token = lock_wait_token;
