@@ -366,30 +366,54 @@ impl From<::pd_client::Error> for ErrorInner {
 impl From<txn_types::Error> for ErrorInner {
     fn from(err: txn_types::Error) -> Self {
         match err {
-            txn_types::Error(box txn_types::ErrorInner::Io(e)) => ErrorInner::Io(e),
-            txn_types::Error(box txn_types::ErrorInner::Codec(e)) => ErrorInner::Codec(e),
-            txn_types::Error(box txn_types::ErrorInner::BadFormatLock)
-            | txn_types::Error(box txn_types::ErrorInner::BadFormatWrite) => {
-                ErrorInner::BadFormat(err)
+            txn_types::Error(boxed) => {
+                match *boxed {
+                    txn_types::ErrorInner::Io(e) => ErrorInner::Io(e),
+                    txn_types::ErrorInner::Codec(e) => ErrorInner::Codec(e),
+                    txn_types::ErrorInner::BadFormatLock => ErrorInner::BadFormat(txn_types::Error(boxed)),
+                    txn_types::ErrorInner::BadFormatWrite => ErrorInner::BadFormat(txn_types::Error(boxed)),
+                    txn_types::ErrorInner::KeyIsLocked(lock_info) => ErrorInner::KeyIsLocked(lock_info),
+                    txn_types::ErrorInner::WriteConflict {
+                        start_ts,
+                        conflict_start_ts,
+                        conflict_commit_ts,
+                        key,
+                        primary,
+                        reason,
+                    } => ErrorInner::WriteConflict {
+                        start_ts,
+                        conflict_start_ts,
+                        conflict_commit_ts,
+                        key,
+                        primary,
+                        reason,
+                    },
+                }
             }
-            txn_types::Error(box txn_types::ErrorInner::KeyIsLocked(lock_info)) => {
-                ErrorInner::KeyIsLocked(lock_info)
-            }
-            txn_types::Error(box txn_types::ErrorInner::WriteConflict {
-                start_ts,
-                conflict_start_ts,
-                conflict_commit_ts,
-                key,
-                primary,
-                reason,
-            }) => ErrorInner::WriteConflict {
-                start_ts,
-                conflict_start_ts,
-                conflict_commit_ts,
-                key,
-                primary,
-                reason,
-            },
+            // txn_types::Error(box txn_types::ErrorInner::Io(e)) => ErrorInner::Io(e),
+            // txn_types::Error(box txn_types::ErrorInner::Codec(e)) => ErrorInner::Codec(e),
+            // txn_types::Error(box txn_types::ErrorInner::BadFormatLock)
+            // | txn_types::Error(box txn_types::ErrorInner::BadFormatWrite) => {
+            //     ErrorInner::BadFormat(err)
+            // }
+            // txn_types::Error(box txn_types::ErrorInner::KeyIsLocked(lock_info)) => {
+            //     ErrorInner::KeyIsLocked(lock_info)
+            // }
+            // txn_types::Error(box txn_types::ErrorInner::WriteConflict {
+            //     start_ts,
+            //     conflict_start_ts,
+            //     conflict_commit_ts,
+            //     key,
+            //     primary,
+            //     reason,
+            // }) => ErrorInner::WriteConflict {
+            //     start_ts,
+            //     conflict_start_ts,
+            //     conflict_commit_ts,
+            //     key,
+            //     primary,
+            //     reason,
+            // },
         }
     }
 }

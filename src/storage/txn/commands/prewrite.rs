@@ -665,46 +665,92 @@ impl<K: PrewriteKind> Prewriter<K> {
                     txn.guards = Vec::new();
                     final_min_commit_ts = TimeStamp::zero();
                 }
-                Err(MvccError(box MvccErrorInner::WriteConflict {
-                    start_ts,
-                    conflict_commit_ts,
-                    ..
-                })) if conflict_commit_ts > start_ts => {
-                    return check_committed_record_on_err(prewrite_result, txn, reader, &key);
-                }
-                Err(MvccError(box MvccErrorInner::PessimisticLockNotFound { .. })) => {
-                    return check_committed_record_on_err(prewrite_result, txn, reader, &key);
-                }
-                Err(MvccError(box MvccErrorInner::CommitTsTooLarge { .. })) => {
-                    // The prewrite might be a retry and the record may have been committed.
-                    // So, we need to prevent the fallback to avoid duplicate commits.
-                    if let Ok(res) =
-                        check_committed_record_on_err(prewrite_result, txn, reader, &key)
-                    {
-                        return Ok(res);
+                Err(MvccError(boxed)) => {
+                    match *boxed {
+                        MvccErrorInner::WriteConflict {
+                            start_ts,
+                            conflict_commit_ts,
+                            ..
+                        } if conflict_commit_ts > start_ts => {
+                            return check_committed_record_on_err(Err(MvccError(boxed)), txn, reader, &key);
+                        }
+                        
+                        MvccErrorInner::PessimisticLockNotFound { .. } => {
+                            return check_committed_record_on_err(Err(MvccError(boxed)), txn, reader, &key);
+                        }
+                        MvccErrorInner::CommitTsTooLarge { .. } => {
+                            // The prewrite might be a retry and the record may have been committed.
+                            // So, we need to prevent the fallback to avoid duplicate commits.
+                            if let Ok(res) =
+                                check_committed_record_on_err(Err(MvccError(boxed)), txn, reader, &key)
+                            {
+                                return Ok(res);
+                            }
+                            // fallback to not using async commit or 1pc
+                            props.commit_kind = CommitKind::TwoPc;
+                            async_commit_pk = None;
+                            self.secondary_keys = None;
+                            self.try_one_pc = false;
+                            fallback_1pc_locks(txn);
+                            // release memory locks
+                            txn.guards = Vec::new();
+                            final_min_commit_ts = TimeStamp::zero();
+                        },
+                        MvccErrorInner::KeyIsLocked { .. } => {
+                            match check_committed_record_on_err(Err(MvccError(boxed)), txn, reader, &key) {
+                                Ok(res) => return Ok(res),
+                                Err(e) => locks.push(Err(e.into())),
+                            }
+                        },
+                        MvccErrorInner::AssertionFailed { .. } => {
+                            if assertion_failure.is_none() {
+                                assertion_failure = Some(MvccError(boxed));
+                            }
+                        },
+                        _ => return Err(Error::from(MvccError(boxed))),
                     }
-                    // fallback to not using async commit or 1pc
-                    props.commit_kind = CommitKind::TwoPc;
-                    async_commit_pk = None;
-                    self.secondary_keys = None;
-                    self.try_one_pc = false;
-                    fallback_1pc_locks(txn);
-                    // release memory locks
-                    txn.guards = Vec::new();
-                    final_min_commit_ts = TimeStamp::zero();
                 }
-                Err(MvccError(box MvccErrorInner::KeyIsLocked { .. })) => {
-                    match check_committed_record_on_err(prewrite_result, txn, reader, &key) {
-                        Ok(res) => return Ok(res),
-                        Err(e) => locks.push(Err(e.into())),
-                    }
-                }
-                Err(e @ MvccError(box MvccErrorInner::AssertionFailed { .. })) => {
-                    if assertion_failure.is_none() {
-                        assertion_failure = Some(e);
-                    }
-                }
-                Err(e) => return Err(Error::from(e)),
+                // Err(MvccError(box MvccErrorInner::WriteConflict {
+                //     start_ts,
+                //     conflict_commit_ts,
+                //     ..
+                // })) if conflict_commit_ts > start_ts => {
+                //     return check_committed_record_on_err(prewrite_result, txn, reader, &key);
+                // }
+                
+                // Err(MvccError(box MvccErrorInner::PessimisticLockNotFound { .. })) => {
+                //     return check_committed_record_on_err(prewrite_result, txn, reader, &key);
+                // }
+                // Err(MvccError(box MvccErrorInner::CommitTsTooLarge { .. })) => {
+                //     // The prewrite might be a retry and the record may have been committed.
+                //     // So, we need to prevent the fallback to avoid duplicate commits.
+                //     if let Ok(res) =
+                //         check_committed_record_on_err(prewrite_result, txn, reader, &key)
+                //     {
+                //         return Ok(res);
+                //     }
+                //     // fallback to not using async commit or 1pc
+                //     props.commit_kind = CommitKind::TwoPc;
+                //     async_commit_pk = None;
+                //     self.secondary_keys = None;
+                //     self.try_one_pc = false;
+                //     fallback_1pc_locks(txn);
+                //     // release memory locks
+                //     txn.guards = Vec::new();
+                //     final_min_commit_ts = TimeStamp::zero();
+                // }
+                // Err(MvccError(box MvccErrorInner::KeyIsLocked { .. })) => {
+                //     match check_committed_record_on_err(prewrite_result, txn, reader, &key) {
+                //         Ok(res) => return Ok(res),
+                //         Err(e) => locks.push(Err(e.into())),
+                //     }
+                // }
+                // Err(e @ MvccError(box MvccErrorInner::AssertionFailed { .. })) => {
+                //     if assertion_failure.is_none() {
+                //         assertion_failure = Some(e);
+                //     }
+                // }
+                // Err(e) => return Err(Error::from(e)),
             }
         }
 

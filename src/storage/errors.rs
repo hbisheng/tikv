@@ -272,65 +272,70 @@ pub fn get_tag_from_header(header: &errorpb::Error) -> &'static str {
 pub fn extract_region_error_from_error(e: &Error) -> Option<errorpb::Error> {
     match e {
         // TODO: use `Error::cause` instead.
-        Error(box ErrorInner::Kv(KvError(box KvErrorInner::Request(ref e))))
-        | Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Engine(KvError(
-            box KvErrorInner::Request(ref e),
-        )))))
-        | Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::Kv(KvError(box KvErrorInner::Request(ref e))),
-        ))))) => Some(e.to_owned()),
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::MaxTimestampNotSynced {
-            ..
-        }))) => {
-            let mut err = errorpb::Error::default();
-            err.set_max_timestamp_not_synced(Default::default());
-            Some(err)
-        }
-        Error(box ErrorInner::Txn(
-            e @ TxnError(box TxnErrorInner::RawKvMaxTimestampNotSynced { .. }),
-        )) => {
-            let mut err = errorpb::Error::default();
-            err.set_max_timestamp_not_synced(Default::default());
-            err.set_message(format!("{}", e));
-            Some(err)
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::FlashbackNotPrepared(
-            region_id,
-        )))) => {
-            let mut err = errorpb::Error::default();
-            let mut flashback_not_prepared_err = errorpb::FlashbackNotPrepared::default();
-            flashback_not_prepared_err.set_region_id(*region_id);
-            err.set_flashback_not_prepared(flashback_not_prepared_err);
-            Some(err)
-        }
-        Error(box ErrorInner::SchedTooBusy) => {
-            let mut err = errorpb::Error::default();
-            let mut server_is_busy_err = errorpb::ServerIsBusy::default();
-            server_is_busy_err.set_reason(SCHEDULER_IS_BUSY.to_owned());
-            err.set_server_is_busy(server_is_busy_err);
-            Some(err)
-        }
-        Error(box ErrorInner::GcWorkerTooBusy) => {
-            let mut err = errorpb::Error::default();
-            let mut server_is_busy_err = errorpb::ServerIsBusy::default();
-            server_is_busy_err.set_reason(GC_WORKER_IS_BUSY.to_owned());
-            err.set_server_is_busy(server_is_busy_err);
-            Some(err)
-        }
-        Error(box ErrorInner::Closed) => {
-            // TiKV is closing, return an RegionError to tell the client that this region is
-            // unavailable temporarily, the client should retry the request in other TiKVs.
-            let mut err = errorpb::Error::default();
-            err.set_message("TiKV is Closing".to_string());
-            Some(err)
-        }
-        Error(box ErrorInner::DeadlineExceeded) => {
-            let mut err = errorpb::Error::default();
-            err.set_message(e.to_string());
-            set_deadline_exceeded_busy_error(&mut err);
-            Some(err)
-        }
-        _ => None,
+        Error(ref boxed) => match **boxed {
+            ErrorInner::Kv(KvError(ref kv_error)) => match **kv_error {
+                KvErrorInner::Request(ref e) => Some(e.to_owned()),
+                _ => None,
+            },
+            ErrorInner::Txn(TxnError(ref txn_error)) => match **txn_error {
+                TxnErrorInner::Engine(KvError(ref kv_error)) => match **kv_error {
+                    KvErrorInner::Request(ref e) => Some(e.to_owned()),
+                    _ => None,
+                },
+                TxnErrorInner::Mvcc(MvccError(ref mvcc_error)) => match **mvcc_error {
+                    MvccErrorInner::Kv(KvError(ref kv_error)) => match **kv_error {
+                        KvErrorInner::Request(ref e) => Some(e.to_owned()),
+                        _ => None,
+                    },
+                    _ => None,
+                },
+                TxnErrorInner::MaxTimestampNotSynced { .. } => {
+                    let mut err = errorpb::Error::default();
+                    err.set_max_timestamp_not_synced(Default::default());
+                    Some(err)
+                },
+                TxnErrorInner::RawKvMaxTimestampNotSynced { .. } => {
+                    let mut err = errorpb::Error::default();
+                    err.set_max_timestamp_not_synced(Default::default());
+                    err.set_message(format!("{}", e));
+                    Some(err)
+                },
+                TxnErrorInner::FlashbackNotPrepared(ref region_id) => {
+                    let mut err = errorpb::Error::default();
+                    let mut flashback_not_prepared_err = errorpb::FlashbackNotPrepared::default();
+                    flashback_not_prepared_err.set_region_id(*region_id);
+                    err.set_flashback_not_prepared(flashback_not_prepared_err);
+                    Some(err)
+                },
+                _ => None,
+            },
+            ErrorInner::SchedTooBusy => {
+                let mut err = errorpb::Error::default();
+                let mut server_is_busy_err = errorpb::ServerIsBusy::default();
+                server_is_busy_err.set_reason(SCHEDULER_IS_BUSY.to_owned());
+                err.set_server_is_busy(server_is_busy_err);
+                Some(err)
+            },
+            ErrorInner::GcWorkerTooBusy => {
+                let mut err = errorpb::Error::default();
+                let mut server_is_busy_err = errorpb::ServerIsBusy::default();
+                server_is_busy_err.set_reason(GC_WORKER_IS_BUSY.to_owned());
+                err.set_server_is_busy(server_is_busy_err);
+                Some(err)
+            },
+            ErrorInner::Closed => {
+                let mut err = errorpb::Error::default();
+                err.set_message("TiKV is Closing".to_string());
+                Some(err)
+            },
+            ErrorInner::DeadlineExceeded => {
+                let mut err = errorpb::Error::default();
+                err.set_message(e.to_string());
+                set_deadline_exceeded_busy_error(&mut err);
+                Some(err)
+            },
+            _ => None,
+        },
     }
 }
 
@@ -342,137 +347,152 @@ pub fn extract_region_error<T>(res: &Result<T>) -> Option<errorpb::Error> {
 }
 
 pub fn extract_committed(err: &Error) -> Option<TimeStamp> {
-    match *err {
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::Committed { commit_ts, .. },
-        ))))) => Some(commit_ts),
-        _ => None,
+    match err {
+        Error(ref boxed) => match **boxed {
+            ErrorInner::Txn(TxnError(ref txn_error)) => match **txn_error {
+                TxnErrorInner::Mvcc(MvccError(ref mvcc_error)) => match **mvcc_error {
+                    MvccErrorInner::Committed { commit_ts, .. } => Some(commit_ts),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        },
     }
 }
 
 pub fn extract_key_error(err: &Error) -> kvrpcpb::KeyError {
     let mut key_error = kvrpcpb::KeyError::default();
     match err {
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::KeyIsLocked(info),
-        )))))
-        | Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Engine(KvError(
-            box KvErrorInner::KeyIsLocked(info),
-        )))))
-        | Error(box ErrorInner::Kv(KvError(box KvErrorInner::KeyIsLocked(info)))) => {
-            key_error.set_locked(info.clone());
-        }
-        // failed in prewrite or pessimistic lock
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::WriteConflict {
-                start_ts,
-                conflict_start_ts,
-                conflict_commit_ts,
-                key,
-                primary,
-                reason,
-            },
-        ))))) => {
-            let mut write_conflict = kvrpcpb::WriteConflict::default();
-            write_conflict.set_start_ts(start_ts.into_inner());
-            write_conflict.set_conflict_ts(conflict_start_ts.into_inner());
-            write_conflict.set_conflict_commit_ts(conflict_commit_ts.into_inner());
-            write_conflict.set_key(key.to_owned());
-            write_conflict.set_primary(primary.to_owned());
-            write_conflict.set_reason(reason.to_owned());
-            key_error.set_conflict(write_conflict);
-            // for compatibility with older versions.
-            key_error.set_retryable(format!("{:?}", err));
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::AlreadyExist { key, .. },
-        ))))) => {
-            let mut exist = kvrpcpb::AlreadyExist::default();
-            exist.set_key(key.clone());
-            key_error.set_already_exist(exist);
-        }
-        // failed in commit
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::TxnLockNotFound { .. },
-        ))))) => {
-            warn!("txn conflicts"; "err" => ?err);
-            key_error.set_retryable(format!("{:?}", err));
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::TxnNotFound { start_ts, key },
-        ))))) => {
-            let mut txn_not_found = kvrpcpb::TxnNotFound::default();
-            txn_not_found.set_start_ts(start_ts.into_inner());
-            txn_not_found.set_primary_key(key.to_owned());
-            key_error.set_txn_not_found(txn_not_found);
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::Deadlock {
-                lock_ts,
-                lock_key,
-                deadlock_key_hash,
-                wait_chain,
-                ..
-            },
-        ))))) => {
-            warn!("txn deadlocks"; "err" => ?err);
-            let mut deadlock = kvrpcpb::Deadlock::default();
-            deadlock.set_lock_ts(lock_ts.into_inner());
-            deadlock.set_lock_key(lock_key.to_owned());
-            deadlock.set_deadlock_key_hash(*deadlock_key_hash);
-            deadlock.set_wait_chain(wait_chain.clone().into());
-            key_error.set_deadlock(deadlock);
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::CommitTsExpired {
-                start_ts,
-                commit_ts,
-                key,
-                min_commit_ts,
-            },
-        ))))) => {
-            let mut commit_ts_expired = kvrpcpb::CommitTsExpired::default();
-            commit_ts_expired.set_start_ts(start_ts.into_inner());
-            commit_ts_expired.set_attempted_commit_ts(commit_ts.into_inner());
-            commit_ts_expired.set_key(key.to_owned());
-            commit_ts_expired.set_min_commit_ts(min_commit_ts.into_inner());
-            key_error.set_commit_ts_expired(commit_ts_expired);
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::CommitTsTooLarge { min_commit_ts, .. },
-        ))))) => {
-            let mut commit_ts_too_large = kvrpcpb::CommitTsTooLarge::default();
-            commit_ts_too_large.set_commit_ts(min_commit_ts.into_inner());
-            key_error.set_commit_ts_too_large(commit_ts_too_large);
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::AssertionFailed {
-                start_ts,
-                key,
-                assertion,
-                existing_start_ts,
-                existing_commit_ts,
-            },
-        ))))) => {
-            let mut assertion_failed = kvrpcpb::AssertionFailed::default();
-            assertion_failed.set_start_ts(start_ts.into_inner());
-            assertion_failed.set_key(key.to_owned());
-            assertion_failed.set_assertion(*assertion);
-            assertion_failed.set_existing_start_ts(existing_start_ts.into_inner());
-            assertion_failed.set_existing_commit_ts(existing_commit_ts.into_inner());
-            key_error.set_assertion_failed(assertion_failed);
-        }
-        Error(box ErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-            box MvccErrorInner::PrimaryMismatch(lock_info),
-        ))))) => {
-            let mut primary_mismatch = kvrpcpb::PrimaryMismatch::default();
-            primary_mismatch.set_lock_info(lock_info.clone());
-            key_error.set_primary_mismatch(primary_mismatch);
-        }
-        _ => {
-            error!(?*err; "txn aborts");
-            key_error.set_abort(format!("{:?}", err));
-        }
+        Error(boxed) => {
+            match **boxed {
+                ErrorInner::Kv(KvError(ref boxed_inner)) => {
+                    match **boxed_inner {
+                        KvErrorInner::KeyIsLocked(ref info) => {
+                            key_error.set_locked(info.clone());
+                        },
+                    },
+                },
+                ErrorInner::Txn(TxnError(ref boxed_inner)) => {
+                    match **boxed_inner {
+                        TxnErrorInner::Engine(KvError(ref boxed_inner_inner)) => {
+                            match **boxed_inner_inner {
+                                KvErrorInner::KeyIsLocked(ref info) => {
+                                    key_error.set_locked(info.clone());
+                                },
+                            },
+                        },
+                        TxnErrorInner::Mvcc(MvccError(ref boxed_inner_inner)) => {
+                            match **boxed_inner_inner {
+                                MvccErrorInner::KeyIsLocked(ref info) => {
+                                    key_error.set_locked(info.clone());
+                                },
+                                MvccErrorInner::WriteConflict {
+                                    start_ts,
+                                    conflict_start_ts,
+                                    conflict_commit_ts,
+                                    ref key,
+                                    ref primary,
+                                    ref reason,
+                                } => {
+                                    let mut write_conflict = kvrpcpb::WriteConflict::default();
+                                    write_conflict.set_start_ts(start_ts.into_inner());
+                                    write_conflict.set_conflict_ts(conflict_start_ts.into_inner());
+                                    write_conflict.set_conflict_commit_ts(conflict_commit_ts.into_inner());
+                                    write_conflict.set_key(key.to_owned());
+                                    write_conflict.set_primary(primary.to_owned());
+                                    write_conflict.set_reason(reason.to_owned());
+                                    key_error.set_conflict(write_conflict);
+                                    key_error.set_retryable(format!("{:?}", err));
+                                },
+                                MvccErrorInner::AlreadyExist { ref key, .. } => {
+                                    let mut exist = kvrpcpb::AlreadyExist::default();
+                                    exist.set_key(key.clone());
+                                    key_error.set_already_exist(exist);
+                                },
+                                MvccErrorInner::TxnLockNotFound { .. } => {
+                                    warn!("txn conflicts"; "err" => ?err);
+                                    key_error.set_retryable(format!("{:?}", err));
+                                },
+                                MvccErrorInner::TxnNotFound {
+                                    start_ts, ref key, ..
+                                } => {
+                                    let mut txn_not_found = kvrpcpb::TxnNotFound::default();
+                                    txn_not_found.set_start_ts(start_ts.into_inner());
+                                    txn_not_found.set_primary_key(key.to_owned());
+                                    key_error.set_txn_not_found(txn_not_found);
+                                },
+                                MvccErrorInner::Deadlock {
+                                    ref lock_ts,
+                                    ref lock_key,
+                                    ref deadlock_key_hash,
+                                    ref wait_chain,
+                                    ..
+                                } => {
+                                    warn!("txn deadlocks"; "err" => ?err);
+                                    let mut deadlock = kvrpcpb::Deadlock::default();
+                                    deadlock.set_lock_ts(lock_ts.into_inner());
+                                    deadlock.set_lock_key(lock_key.to_owned());
+                                    deadlock.set_deadlock_key_hash(*deadlock_key_hash);
+                                    deadlock.set_wait_chain(wait_chain.clone().into());
+                                    key_error.set_deadlock(deadlock);
+                                },
+                                MvccErrorInner::CommitTsExpired {
+                                    ref start_ts,
+                                    ref commit_ts,
+                                    ref key,
+                                    ref min_commit_ts,
+                                } => {
+                                    let mut commit_ts_expired = kvrpcpb::CommitTsExpired::default();
+                                    commit_ts_expired.set_start_ts(start_ts.into_inner());
+                                    commit_ts_expired.set_attempted_commit_ts(commit_ts.into_inner());
+                                    commit_ts_expired.set_key(key.to_owned());
+                                    commit_ts_expired.set_min_commit_ts(min_commit_ts.into_inner());
+                                    key_error.set_commit_ts_expired(commit_ts_expired);
+                                },
+                                MvccErrorInner::CommitTsTooLarge { min_commit_ts, .. } => {
+                                    let mut commit_ts_too_large = kvrpcpb::CommitTsTooLarge::default();
+                                    commit_ts_too_large.set_commit_ts(min_commit_ts.into_inner());
+                                    key_error.set_commit_ts_too_large(commit_ts_too_large);
+                                },
+                                MvccErrorInner::AssertionFailed {
+                                    ref start_ts,
+                                    ref key,
+                                    ref assertion,
+                                    ref existing_start_ts,
+                                    ref existing_commit_ts,
+                                } => {
+                                    let mut assertion_failed = kvrpcpb::AssertionFailed::default();
+                                    assertion_failed.set_start_ts(start_ts.into_inner());
+                                    assertion_failed.set_key(key.to_owned());
+                                    assertion_failed.set_assertion(*assertion);
+                                    assertion_failed.set_existing_start_ts(existing_start_ts.into_inner());
+                                    assertion_failed.set_existing_commit_ts(existing_commit_ts.into_inner());
+                                    key_error.set_assertion_failed(assertion_failed);
+                                },
+                                MvccErrorInner::PrimaryMismatch(ref lock_info) => {
+                                    let mut primary_mismatch = kvrpcpb::PrimaryMismatch::default();
+                                    primary_mismatch.set_lock_info(lock_info.clone());
+                                    key_error.set_primary_mismatch(primary_mismatch);
+                                },
+                                _ => {
+                                    error!(?*err; "txn aborts");
+                                    key_error.set_abort(format!("{:?}", err));
+                                }
+                            }
+                        }
+                        _ => {
+                            error!(?*err; "txn aborts");
+                            key_error.set_abort(format!("{:?}", err));
+                        }
+                    }
+                },
+                _ => {
+                    error!(?*err; "txn aborts");
+                    key_error.set_abort(format!("{:?}", err));
+                }
+            }
+        },
     }
     key_error
 }

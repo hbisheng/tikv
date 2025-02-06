@@ -530,10 +530,19 @@ where
         let f = router.query_region(id);
         let meta = match f.await {
             Ok(meta) => meta,
-            Err(tikv_kv::Error(box tikv_kv::ErrorInner::Request(header)))
-                if header.has_region_not_found() =>
-            {
-                return not_found(format!("region({}) not found", id));
+            Err(err @ tikv_kv::Error(_)) => {
+                match &err {
+                    tikv_kv::Error(boxed) => match **boxed {
+                        tikv_kv::ErrorInner::Request(ref header) if header.has_region_not_found() => {
+                            return not_found(format!("region({}) not found", id));
+                        }
+                        _ => {}
+                    },
+                }
+                return Ok(make_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("query failed: {}", err),
+                ));
             }
             Err(err) => {
                 return Ok(make_response(
@@ -542,6 +551,7 @@ where
                 ));
             }
         };
+        
 
         let body = match serde_json::to_vec(&meta) {
             Ok(body) => body,

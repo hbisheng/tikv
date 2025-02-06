@@ -157,55 +157,96 @@ impl Flush {
                         Some(mutation_type),
                     );
                 }
-                Err(crate::storage::mvcc::Error(
-                    box crate::storage::mvcc::ErrorInner::WriteConflict {
+                Err(crate::storage::mvcc::Error(boxed)) => match *boxed {
+                    crate::storage::mvcc::ErrorInner::WriteConflict {
                         start_ts,
                         conflict_commit_ts,
                         ..
+                    } if conflict_commit_ts > start_ts => {
+                        return check_committed_record_on_err(Err(crate::storage::mvcc::Error(boxed)), txn, reader, &key)
+                            .map(|(locks, _)| locks);
                     },
-                )) if conflict_commit_ts > start_ts => {
-                    return check_committed_record_on_err(prewrite_result, txn, reader, &key)
-                        .map(|(locks, _)| locks);
-                }
-                Err(crate::storage::mvcc::Error(
-                    box crate::storage::mvcc::ErrorInner::PessimisticLockNotFound { .. },
-                ))
-                | Err(crate::storage::mvcc::Error(
-                    box crate::storage::mvcc::ErrorInner::CommitTsTooLarge { .. },
-                )) => {
-                    unreachable!();
-                }
-                Err(crate::storage::mvcc::Error(
-                    box crate::storage::mvcc::ErrorInner::KeyIsLocked { .. },
-                )) => match check_committed_record_on_err(prewrite_result, txn, reader, &key) {
-                    Ok(res) => return Ok(res.0),
-                    Err(e) => locks.push(Err(e.into())),
-                },
-                Err(
-                    e @ crate::storage::mvcc::Error(
-                        box crate::storage::mvcc::ErrorInner::AssertionFailed { .. },
-                    ),
-                ) => {
-                    if assertion_failure.is_none() {
-                        assertion_failure = Some(e);
-                    }
-                }
-                Err(crate::storage::mvcc::Error(
-                    box crate::storage::mvcc::ErrorInner::GenerationOutOfOrder(
+                    crate::storage::mvcc::ErrorInner::PessimisticLockNotFound { .. } | crate::storage::mvcc::ErrorInner::CommitTsTooLarge { .. } => {
+                        unreachable!();
+                    },
+                    crate::storage::mvcc::ErrorInner::KeyIsLocked { .. } => {
+                        match check_committed_record_on_err(Err(crate::storage::mvcc::Error(boxed)), txn, reader, &key) {
+                            Ok(res) => return Ok(res.0),
+                            Err(e) => locks.push(Err(e.into())),
+                        }
+                    },
+                    crate::storage::mvcc::ErrorInner::AssertionFailed { .. } => {
+                        if assertion_failure.is_none() {
+                            assertion_failure = Some(crate::storage::mvcc::Error(boxed));
+                        }
+                    },
+                    crate::storage::mvcc::ErrorInner::GenerationOutOfOrder(
                         generation,
                         key,
                         lock,
-                    ),
-                )) => {
-                    info!(
-                        "generation in Flush is smaller than that in lock, ignore this mutation";
-                        "key" => ?key,
-                        "start_ts" => self.start_ts,
-                        "generation" => generation,
-                        "lock" => ?lock,
-                    );
-                }
-                Err(e) => return Err(Error::from(e)),
+                    ) => {
+                        info!(
+                            "generation in Flush is smaller than that in lock, ignore this mutation";
+                            "key" => ?key,
+                            "start_ts" => self.start_ts,
+                            "generation" => generation,
+                            "lock" => ?lock,
+                        );
+                    },
+                    _ => { 
+                        return Err(Error::from(crate::storage::mvcc::Error(boxed)));
+                    }
+                },
+
+                // Err(crate::storage::mvcc::Error(
+                //     box crate::storage::mvcc::ErrorInner::WriteConflict {
+                //         start_ts,
+                //         conflict_commit_ts,
+                //         ..
+                //     },
+                // )) if conflict_commit_ts > start_ts => {
+                //     return check_committed_record_on_err(prewrite_result, txn, reader, &key)
+                //         .map(|(locks, _)| locks);
+                // }
+                // Err(crate::storage::mvcc::Error(
+                //     box crate::storage::mvcc::ErrorInner::PessimisticLockNotFound { .. },
+                // ))
+                // | Err(crate::storage::mvcc::Error(
+                //     box crate::storage::mvcc::ErrorInner::CommitTsTooLarge { .. },
+                // )) => {
+                //     unreachable!();
+                // }
+                // Err(crate::storage::mvcc::Error(
+                //     box crate::storage::mvcc::ErrorInner::KeyIsLocked { .. },
+                // )) => match check_committed_record_on_err(prewrite_result, txn, reader, &key) {
+                //     Ok(res) => return Ok(res.0),
+                //     Err(e) => locks.push(Err(e.into())),
+                // },
+                // Err(
+                //     e @ crate::storage::mvcc::Error(
+                //         box crate::storage::mvcc::ErrorInner::AssertionFailed { .. },
+                //     ),
+                // ) => {
+                //     if assertion_failure.is_none() {
+                //         assertion_failure = Some(e);
+                //     }
+                // }
+                // Err(crate::storage::mvcc::Error(
+                //     box crate::storage::mvcc::ErrorInner::GenerationOutOfOrder(
+                //         generation,
+                //         key,
+                //         lock,
+                //     ),
+                // )) => {
+                //     info!(
+                //         "generation in Flush is smaller than that in lock, ignore this mutation";
+                //         "key" => ?key,
+                //         "start_ts" => self.start_ts,
+                //         "generation" => generation,
+                //         "lock" => ?lock,
+                //     );
+                // }
+                // Err(e) => return Err(Error::from(e)),
             }
         }
         if let Some(e) = assertion_failure {

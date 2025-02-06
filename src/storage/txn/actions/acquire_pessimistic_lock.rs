@@ -424,7 +424,7 @@ impl ConflictInfo {
 }
 
 fn is_already_exist(res: &MvccError) -> bool {
-    matches!(res, MvccError(box ErrorInner::AlreadyExist { .. }))
+    matches!(res, MvccError(boxed) if matches!(boxed.as_ref(), ErrorInner::AlreadyExist { .. }))
 }
 
 pub mod tests {

@@ -94,16 +94,16 @@ pub enum Error {
 
 pub fn get_status_kind_from_engine_error(e: &kv::Error) -> RequestStatusKind {
     match *e {
-        KvError(box KvErrorInner::Request(ref header)) => {
-            RequestStatusKind::from(storage::get_error_kind_from_header(header))
-        }
-        KvError(box KvErrorInner::KeyIsLocked(_)) => {
-            RequestStatusKind::err_leader_memory_lock_check
-        }
-        KvError(box KvErrorInner::Timeout(_)) => RequestStatusKind::err_timeout,
-        KvError(box KvErrorInner::EmptyRequest) => RequestStatusKind::err_empty_request,
-        KvError(box KvErrorInner::Undetermined(_)) => RequestStatusKind::err_undetermind,
-        KvError(box KvErrorInner::Other(_)) => RequestStatusKind::err_other,
+        KvError(ref boxed) => match **boxed {
+            KvErrorInner::Request(ref header) => {
+                RequestStatusKind::from(storage::get_error_kind_from_header(header))
+            }
+            KvErrorInner::KeyIsLocked(_) => RequestStatusKind::err_leader_memory_lock_check,
+            KvErrorInner::Timeout(_) => RequestStatusKind::err_timeout,
+            KvErrorInner::EmptyRequest => RequestStatusKind::err_empty_request,
+            KvErrorInner::Undetermined(_) => RequestStatusKind::err_undetermind,
+            KvErrorInner::Other(_) => RequestStatusKind::err_other,
+        },
     }
 }
 
@@ -470,7 +470,7 @@ where
         }
     }
 
-    type WriteRes = impl Stream<Item = WriteEvent> + Send + Unpin;
+    type WriteRes = Pin<Box<dyn Stream<Item = WriteEvent> + Send + Unpin>>;
     fn async_write(
         &self,
         ctx: &Context,
@@ -586,17 +586,17 @@ where
             // how the `applied_cb` does.
             tx.notify(res);
         }
-        rx.inspect(move |ev| {
+        Box::pin(rx.inspect(move |ev| {
             if let WriteEvent::Finished(Err(e)) = ev {
                 let status_kind = get_status_kind_from_engine_error(e);
                 ASYNC_REQUESTS_COUNTER_VEC.write.get(status_kind).inc();
             }
-        })
+        }))
     }
 
-    type SnapshotRes = impl Future<Output = kv::Result<Self::Snap>> + Send;
+    type SnapshotRes = Pin<Box<dyn Future<Output = kv::Result<Self::Snap>> + Send>>;
     fn async_snapshot(&mut self, ctx: SnapContext<'_>) -> Self::SnapshotRes {
-        async_snapshot(&mut self.router, ctx)
+        Box::pin(async_snapshot(&mut self.router, ctx))
     }
 
     fn release_snapshot(&mut self) {
@@ -604,10 +604,10 @@ where
     }
 
     type IMSnap = RegionSnapshot<HybridEngineSnapshot<E, RegionCacheMemoryEngine>>;
-    type IMSnapshotRes = impl Future<Output = kv::Result<Self::IMSnap>> + Send;
+    type IMSnapshotRes = Pin<Box<dyn Future<Output = kv::Result<Self::IMSnap>> + Send>>;
     fn async_in_memory_snapshot(&mut self, ctx: SnapContext<'_>) -> Self::IMSnapshotRes {
         let replica_read = ctx.pb_ctx.get_replica_read();
-        async_snapshot(&mut self.router, ctx).map_ok(move |region_snap| {
+        Box::pin(async_snapshot(&mut self.router, ctx).map_ok(move |region_snap| {
             // TODO: Remove replace_snapshot. Taking a snapshot and replacing it
             // with a new one is a bit confusing.
             // A better way to build an in-memory snapshot is to return
@@ -621,7 +621,7 @@ where
                 }
                 HybridEngineSnapshot::from_observed_snapshot(disk_snap, pinned)
             })
-        })
+        }))
     }
 
     fn get_mvcc_properties_cf(
@@ -760,7 +760,8 @@ where
             .read(read_ctx, cmd, store_cb)
             .map_err(kv::Error::from);
     }
-    async move {
+
+    Box::pin(async move {
         let res = match res {
             Ok(()) => match f.await {
                 Ok(r) => r,
@@ -790,7 +791,7 @@ where
                 Err(e)
             }
         }
-    }
+    })
 }
 
 #[derive(Clone)]
@@ -854,15 +855,21 @@ impl ReadIndexObserver for ReplicaReadLockChecker {
                         )
                     },
                 );
-                if let Err(txn_types::Error(box txn_types::ErrorInner::KeyIsLocked(lock))) = res {
-                    rctx.locked = Some(lock);
-                    REPLICA_READ_LOCK_CHECK_HISTOGRAM_VEC_STATIC
-                        .locked
-                        .observe(begin_instant.saturating_elapsed().as_secs_f64());
-                } else {
-                    REPLICA_READ_LOCK_CHECK_HISTOGRAM_VEC_STATIC
-                        .unlocked
-                        .observe(begin_instant.saturating_elapsed().as_secs_f64());
+
+                if let Err(txn_types::Error(ref boxed)) = res {
+                    match **boxed {
+                        txn_types::ErrorInner::KeyIsLocked(ref lock) => {
+                            rctx.locked = Some(lock.clone());
+                            REPLICA_READ_LOCK_CHECK_HISTOGRAM_VEC_STATIC
+                                .locked
+                                .observe(begin_instant.saturating_elapsed().as_secs_f64());
+                        }
+                        _ => {
+                            REPLICA_READ_LOCK_CHECK_HISTOGRAM_VEC_STATIC
+                                .unlocked
+                                .observe(begin_instant.saturating_elapsed().as_secs_f64());
+                        }
+                    }
                 }
             }
             msg.mut_entries()[0].set_data(rctx.to_bytes().into());

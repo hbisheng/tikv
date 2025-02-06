@@ -281,7 +281,7 @@ impl<EK: KvEngine, ER: RaftEngine> tikv_kv::Engine for RaftKv2<EK, ER> {
         self.async_snapshot(ctx)
     }
 
-    type WriteRes = impl Stream<Item = WriteEvent> + Send + Unpin;
+    type WriteRes = Pin<Box<dyn Stream<Item = WriteEvent> + Send + Unpin>>;
     fn async_write(
         &self,
         ctx: &kvproto::kvrpcpb::Context,
@@ -361,16 +361,18 @@ impl<EK: KvEngine, ER: RaftEngine> tikv_kv::Engine for RaftKv2<EK, ER> {
                 .check_send(region_id, msg)
                 .map_err(tikv_kv::Error::from)
         };
-        (Transform {
-            resp: CmdResStream::new(sub),
-            early_err: res.err(),
-        })
-        .inspect(move |ev| {
-            if let WriteEvent::Finished(Err(e)) = ev {
-                let status_kind = get_status_kind_from_engine_error(e);
-                ASYNC_REQUESTS_COUNTER_VEC.write.get(status_kind).inc();
-            }
-        })
+        Box::pin(
+            (Transform {
+                resp: CmdResStream::new(sub),
+                early_err: res.err(),
+            })
+            .inspect(move |ev| {
+                if let WriteEvent::Finished(Err(e)) = ev {
+                    let status_kind = get_status_kind_from_engine_error(e);
+                    ASYNC_REQUESTS_COUNTER_VEC.write.get(status_kind).inc();
+                }
+            })
+        )
     }
 
     #[inline]

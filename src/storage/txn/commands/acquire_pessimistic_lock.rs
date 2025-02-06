@@ -119,35 +119,41 @@ impl<S: Snapshot, L: LockManager> WriteCommand<S, L> for AcquirePessimisticLock 
                     // MutationType is unknown in AcquirePessimisticLock stage.
                     insert_old_value_if_resolved(&mut old_values, k, txn.start_ts, old_value, None);
                 }
-                Err(MvccError(box MvccErrorInner::KeyIsLocked(lock_info))) => {
-                    let request_parameters = PessimisticLockParameters {
-                        pb_ctx: ctx.clone(),
-                        primary: self.primary.clone(),
-                        start_ts,
-                        lock_ttl: self.lock_ttl,
-                        for_update_ts: self.for_update_ts,
-                        wait_timeout: self.wait_timeout,
-                        return_values: self.return_values,
-                        min_commit_ts: self.min_commit_ts,
-                        check_existence: self.check_existence,
-                        is_first_lock: self.is_first_lock,
-                        lock_only_if_exists: self.lock_only_if_exists,
-                        allow_lock_with_conflict: self.allow_lock_with_conflict,
-                    };
-                    let lock_info = WriteResultLockInfo::new(
-                        lock_info,
-                        request_parameters,
-                        k,
-                        should_not_exist,
-                    );
-                    encountered_locks.push(lock_info);
-                    // Do not lock previously succeeded keys.
-                    txn.clear();
-                    res.0.clear();
-                    res.push(PessimisticLockKeyResult::Waiting);
-                    break;
+                Err(MvccError(boxed)) => {
+                    match *boxed {
+                        MvccErrorInner::KeyIsLocked(lock_info) => {
+                            let request_parameters = PessimisticLockParameters {
+                                pb_ctx: ctx.clone(),
+                                primary: self.primary.clone(),
+                                start_ts,
+                                lock_ttl: self.lock_ttl,
+                                for_update_ts: self.for_update_ts,
+                                wait_timeout: self.wait_timeout,
+                                return_values: self.return_values,
+                                min_commit_ts: self.min_commit_ts,
+                                check_existence: self.check_existence,
+                                is_first_lock: self.is_first_lock,
+                                lock_only_if_exists: self.lock_only_if_exists,
+                                allow_lock_with_conflict: self.allow_lock_with_conflict,
+                            };
+                            let lock_info = WriteResultLockInfo::new(
+                                lock_info,
+                                request_parameters,
+                                k,
+                                should_not_exist,
+                            );
+                            encountered_locks.push(lock_info);
+                            // Do not lock previously succeeded keys.
+                            txn.clear();
+                            res.0.clear();
+                            res.push(PessimisticLockKeyResult::Waiting);
+                            break;
+                        },
+                        _ => {
+                            return Err(Error::from(MvccError(boxed)));  
+                        },
+                    }   
                 }
-                Err(e) => return Err(Error::from(e)),
             }
         }
 

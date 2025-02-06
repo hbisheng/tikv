@@ -295,14 +295,16 @@ impl<L: LockManager> LockWaitQueues<L> {
         let mut err = lock_wait_entry.req_states.get_external_error();
 
         if let DashMapEntry::Occupied(key_state_entry) = key_state {
-            if let StorageError(box StorageErrorInner::Txn(TxnError(box TxnErrorInner::Mvcc(
-                MvccError(box MvccErrorInner::KeyIsLocked(lock_info)),
-            )))) = &mut err
-            {
-                // Update the lock info in the error to the latest if possible.
-                let latest_lock_info = &key_state_entry.get().current_lock;
-                if !latest_lock_info.key.is_empty() {
-                    *lock_info = latest_lock_info.clone();
+            let StorageError(ref mut boxed_err) = &mut err; 
+            if let StorageErrorInner::Txn(TxnError(ref mut boxed_txn)) = **boxed_err {
+                if let TxnErrorInner::Mvcc(MvccError(ref mut boxed_mvcc)) = **boxed_txn {
+                    if let MvccErrorInner::KeyIsLocked(ref mut lock_info) = **boxed_mvcc {
+                        // Update the lock info in the error to the latest if possible.
+                        let latest_lock_info = &key_state_entry.get().current_lock;
+                        if !latest_lock_info.key.is_empty() {
+                            *lock_info = latest_lock_info.clone();  // Update the lock_info.
+                        }
+                    }
                 }
             }
         }
