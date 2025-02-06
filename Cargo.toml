@@ -300,7 +300,7 @@ members = [
   "fuzz/fuzzer-libfuzzer",
   "tests",
 ]
-default-members = ["cmd/tikv-server", "cmd/tikv-ctl"]
+default-members = ["cmd/tikv-server"]
 
 [workspace.metadata.cargo-machete]
 ignored = [
