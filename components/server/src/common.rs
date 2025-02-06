@@ -742,21 +742,6 @@ pub trait ConfiguredRaftEngine: RaftEngine {
     fn register_config(&self, _cfg_controller: &mut ConfigController);
 }
 
-impl<T: RaftEngine> ConfiguredRaftEngine for T {
-    default fn build(
-        _: &TikvConfig,
-        _: &Arc<Env>,
-        _: &Option<Arc<DataKeyManager>>,
-        _: &Cache,
-    ) -> (Self, Option<Arc<RocksStatistics>>) {
-        unimplemented!()
-    }
-    default fn as_rocks_engine(&self) -> Option<&RocksEngine> {
-        None
-    }
-    default fn register_config(&self, _cfg_controller: &mut ConfigController) {}
-}
-
 impl ConfiguredRaftEngine for RocksEngine {
     fn build(
         config: &TikvConfig,
@@ -843,6 +828,11 @@ impl ConfiguredRaftEngine for RaftLogEngine {
         }
         (raft_engine, None)
     }
+
+    fn as_rocks_engine(&self) -> Option<&RocksEngine> {
+        None
+    }
+    fn register_config(&self, _cfg_controller: &mut ConfigController) {}
 }
 
 const DEFAULT_ENGINE_METRICS_RESET_INTERVAL: Duration = Duration::from_millis(60_000);

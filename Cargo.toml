@@ -410,7 +410,7 @@ raft = { version = "0.7.0", default-features = false, features = [
   "protobuf-codec",
 ] }
 raft-engine = { git = "https://github.com/hbisheng/raft-engine.git", branch = "remove-nightly" }
-raft-engine-ctl = { git = "https://github.com/hbisheng/raft-engine.git" }
+raft-engine-ctl = { git = "https://github.com/hbisheng/raft-engine.git", branch = "remove-nightly" }
 grpcio = { version = "0.10.4", default-features = false, features = [
   "openssl",
   "protobuf-codec",
