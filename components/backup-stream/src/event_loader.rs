@@ -282,7 +282,13 @@ where
                     region.id
                 )
             })
-            .flatten()
+            .and_then(|res| res.map_err(|e| {
+                annotate!(
+                    e,
+                    "Failed to capture change for region {}",
+                    region.id
+                )
+            }))
             .context(format_args!(
                 "failed to get initial snapshot: failed to get the snapshot (region_id = {})",
                 region.get_id(),

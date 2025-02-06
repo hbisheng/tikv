@@ -103,26 +103,27 @@ impl SlashEtc {
     }
 
     fn get_key(&self, keys: super::Keys) -> Vec<KeyValue> {
-        let (start_key, end_key) = keys.into_bound();
-        let mvccs = self
-            .items
-            .range((
-                Bound::Included(&Key(start_key, 0)),
-                Bound::Excluded(&Key(end_key, 0)),
-            ))
-            .collect::<Vec<_>>();
-        let kvs = mvccs
-            .as_slice()
-            .group_by(|k1, k2| k1.0.0 == k2.0.0)
-            .filter_map(|k| {
-                let (k, v) = k.last()?;
-                match v {
-                    Value::Val(val) => Some(KeyValue(MetaKey(k.0.clone()), val.clone())),
-                    Value::Del => None,
-                }
-            })
-            .collect::<Vec<_>>();
-        kvs
+        vec![KeyValue(MetaKey(vec![]), vec![])]
+        // let (start_key, end_key) = keys.into_bound();
+        // let mvccs = self
+        //     .items
+        //     .range((
+        //         Bound::Included(&Key(start_key, 0)),
+        //         Bound::Excluded(&Key(end_key, 0)),
+        //     ))
+        //     .collect::<Vec<_>>();
+        // let kvs = mvccs
+        //     .as_slice()
+        //     .group_by(|k1, k2| k1.0.0 == k2.0.0)
+        //     .filter_map(|k| {
+        //         let (k, v) = k.last()?;
+        //         match v {
+        //             Value::Val(val) => Some(KeyValue(MetaKey(k.0.clone()), val.clone())),
+        //             Value::Del => None,
+        //         }
+        //     })
+        //     .collect::<Vec<_>>();
+        // kvs
     }
 
     async fn set(&mut self, mut pair: crate::metadata::keys::KeyValue) -> Result<()> {

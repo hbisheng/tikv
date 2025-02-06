@@ -65,30 +65,31 @@ impl Error {
     }
 
     pub fn has_region_error(&self) -> bool {
-        matches!(
-            self,
-            Error::Kv(KvError(box EngineErrorInner::Request(_)))
-                | Error::Txn(TxnError(box TxnErrorInner::Engine(KvError(
-                    box EngineErrorInner::Request(_),
-                ))))
-                | Error::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
-                    box MvccErrorInner::Kv(KvError(box EngineErrorInner::Request(_))),
-                ))))
-                | Error::Request(_)
-        )
+        false
+        // matches!(
+        //     self,
+        //     Error::Kv(KvError(box EngineErrorInner::Request(_)))
+        //         | Error::Txn(TxnError(box TxnErrorInner::Engine(KvError(
+        //             box EngineErrorInner::Request(_),
+        //         ))))
+        //         | Error::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(
+        //             box MvccErrorInner::Kv(KvError(box EngineErrorInner::Request(_))),
+        //         ))))
+        //         | Error::Request(_)
+        // )
     }
 
     fn extract_region_error(self) -> errorpb::Error {
         match self {
-            Error::Kv(KvError(box EngineErrorInner::Request(e)))
-            | Error::Txn(TxnError(box TxnErrorInner::Engine(KvError(
-                box EngineErrorInner::Request(e),
-            ))))
-            | Error::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(box MvccErrorInner::Kv(
-                KvError(box EngineErrorInner::Request(e)),
-            )))))
-            | Error::Request(box e) => e,
-            // TODO: it should be None, add more cdc errors.
+            // Error::Kv(KvError(box EngineErrorInner::Request(e)))
+            // | Error::Txn(TxnError(box TxnErrorInner::Engine(KvError(
+            //     box EngineErrorInner::Request(e),
+            // ))))
+            // | Error::Txn(TxnError(box TxnErrorInner::Mvcc(MvccError(box MvccErrorInner::Kv(
+            //     KvError(box EngineErrorInner::Request(e)),
+            // )))))
+            // | Error::Request(box e) => e,
+            // // TODO: it should be None, add more cdc errors.
             other => {
                 let mut e = errorpb::Error::default();
                 e.set_message(format!("{:?}", other));
