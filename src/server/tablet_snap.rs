@@ -26,7 +26,7 @@ use std::{
     convert::TryFrom,
     fmt::Debug,
     fs::{self, File},
-    io::{self, BorrowedBuf, Read, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::Path,
     sync::{atomic::Ordering, Arc},
     time::Duration,
@@ -98,8 +98,8 @@ async fn read_to(
         .inc_by(cost as u64);
     to.clear();
     to.reserve_exact(size);
-    let mut buf: BorrowedBuf<'_> = to.spare_capacity_mut().into();
-    f.read_buf_exact(buf.unfilled())?;
+    // let mut buf: BorrowedBuf<'_> = to.spare_capacity_mut().into();
+    // f.read_buf_exact(buf.unfilled())?;
     unsafe {
         to.set_len(size);
     }

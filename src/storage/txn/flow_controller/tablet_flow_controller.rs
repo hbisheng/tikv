@@ -156,7 +156,7 @@ impl FlowInfoDispatcher {
                         Err(_) => {}
                     }
 
-                    let msg = flow_info_receiver.recv_deadline(deadline);
+                    let msg = flow_info_receiver.recv_timeout(TICK_DURATION);
                     match msg.clone() {
                         Ok(FlowInfo::L0(_cf, _, region_id))
                         | Ok(FlowInfo::L0Intra(_cf, _, region_id))

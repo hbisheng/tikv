@@ -20,14 +20,7 @@
 #![cfg_attr(test, feature(test))]
 #![recursion_limit = "400"]
 
-
-#![feature(deadline_api)]
-
-#![feature(read_buf)]
-
-
 #![allow(incomplete_features)]
-#![feature(core_io_borrowed_buf)]
 
 #[macro_use(fail_point)]
 extern crate fail;

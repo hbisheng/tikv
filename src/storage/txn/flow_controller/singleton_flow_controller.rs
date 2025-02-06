@@ -486,7 +486,8 @@ impl<E: FlowControlFactorStore + Send + 'static> FlowChecker<E> {
                         Err(_) => {}
                     }
 
-                    let msg = flow_info_receiver.recv_deadline(deadline);
+                    let now = std::time::Instant::now();
+                    let msg = flow_info_receiver.recv_timeout(deadline.saturating_duration_since(now));
                     if let Err(RecvTimeoutError::Timeout) = msg {
                         let (rate, cf_throttle_flags) = checker.update_statistics();
                         for (cf, val) in cf_throttle_flags {
