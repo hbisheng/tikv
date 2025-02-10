@@ -223,7 +223,7 @@ sysinfo = { git = "https://github.com/tikv/sysinfo", branch = "0.26-fix-cpu" }
 #
 # After the PR to rust-rocksdb is merged, remember to comment this out and run `cargo update -p rocksdb`.
 # [patch.'https://github.com/tikv/rust-rocksdb']
-# rocksdb = { git = "https://github.com/your_github_id/rust-rocksdb", branch = "your_branch" }
+rocksdb = { git = "https://github.com/hbisheng/rust-rocksdb", branch = "loong-build" }
 
 [workspace]
 # See https://github.com/rust-lang/rfcs/blob/master/text/2957-cargo-features2.md
@@ -416,10 +416,10 @@ txn_types = { path = "components/txn_types" }
 raft = { version = "0.7.0", default-features = false, features = [
   "protobuf-codec",
 ] }
-raft-engine = { git = "https://github.com/tikv/raft-engine.git", features = [
+raft-engine = { git = "https://github.com/hbisheng/raft-engine.git", branch = "loong-build", features = [
   "swap",
 ] }
-raft-engine-ctl = { git = "https://github.com/tikv/raft-engine.git" }
+raft-engine-ctl = { git = "https://github.com/hbisheng/raft-engine.git", branch = "loong-build" }
 grpcio = { version = "0.10.4", default-features = false, features = [
   "openssl",
   "protobuf-codec",

@@ -4,6 +4,7 @@
 // crate.
 
 #![feature(let_chains)]
+#![feature(trait_upcasting)]
 
 mod db_vector;
 mod engine;

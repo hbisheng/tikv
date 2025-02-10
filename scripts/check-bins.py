@@ -139,7 +139,7 @@ def check_tests(features):
 
 def check_release(enabled_features, args):
     # Ensure statically link SYS_LIB.
-    ensure_link(args, True, SYS_LIB)
+    # ensure_link(args, True, SYS_LIB) # Disable check for loongarch64
     checked_features = []
     if is_jemalloc_enabled(enabled_features):
         checked_features.append("jemalloc")

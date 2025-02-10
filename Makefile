@@ -51,9 +51,16 @@ endif
 
 ifeq ($(TIKV_FRAME_POINTER),1)
 export RUSTFLAGS := $(RUSTFLAGS) -Cforce-frame-pointers=yes
-export CFLAGS := $(CFLAGS) -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
-export CXXFLAGS := $(CXXFLAGS) -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer
+export CFLAGS := $(CFLAGS) -fno-omit-frame-pointer
+export CXXFLAGS := $(CXXFLAGS) -fno-omit-frame-pointer
 ENABLE_FEATURES += pprof-fp
+endif
+
+# Set RUSTC_BOOTSTRAP on LoongArch64 to allow the use of nightly features. This
+# is a hack to get around the fact that Rust nightly is not available on
+# LoongArch64 ABI 1.0.
+ifeq ($(shell uname -p),loongarch64)
+export RUSTC_BOOTSTRAP=1
 endif
 
 # Pick an allocator
@@ -66,15 +73,15 @@ ENABLE_FEATURES += snmalloc
 else ifeq ($(SYSTEM_ALLOC),1)
 # no feature needed for system allocator
 else
-ENABLE_FEATURES += jemalloc
+    # If none of the above was chosen, default to jemalloc unless on LoongArch64
+    ifneq ($(shell uname -p),loongarch64)
+        ENABLE_FEATURES += jemalloc
 
-# Only tested on Linux
-ifeq ($(shell uname -s),Linux)
-ENABLE_FEATURES += mem-profiling
-# According to jemalloc/jemalloc#585, enabling it on some platform or some
-# versions of glibc can cause deadlock.
-# export JEMALLOC_SYS_WITH_MALLOC_CONF = prof:true,prof_active:false
-endif
+        # If on Linux (and not LoongArch64), enable mem-profiling
+        ifeq ($(shell uname -s),Linux)
+            ENABLE_FEATURES += mem-profiling
+        endif
+    endif
 endif
 
 # Disable portable on macOS to sidestep the compiler bug in clang 4.9
@@ -91,6 +98,9 @@ ifeq ($(shell uname -p),arm)
 ROCKSDB_SYS_SSE=0
 endif
 ifeq ($(shell uname -p),arm64)
+ROCKSDB_SYS_SSE=0
+endif
+ifeq ($(shell uname -p),loongarch64)
 ROCKSDB_SYS_SSE=0
 endif
 

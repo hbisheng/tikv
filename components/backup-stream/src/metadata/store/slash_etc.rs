@@ -13,6 +13,7 @@ use tokio::sync::{
     Mutex,
 };
 use tokio_stream::StreamExt;
+use itertools::Itertools;
 
 use super::{Condition, Keys};
 use crate::{
@@ -112,10 +113,11 @@ impl SlashEtc {
             ))
             .collect::<Vec<_>>();
         let kvs = mvccs
-            .as_slice()
-            .group_by(|k1, k2| k1.0.0 == k2.0.0)
-            .filter_map(|k| {
-                let (k, v) = k.last()?;
+            .into_iter()
+            .group_by(|(k, _value)| k.0.clone())
+            .into_iter()
+            .filter_map(|(_key, group)| {
+                let (k, v) = group.last()?;
                 match v {
                     Value::Val(val) => Some(KeyValue(MetaKey(k.0.clone()), val.clone())),
                     Value::Del => None,
