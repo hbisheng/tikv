@@ -29,7 +29,8 @@ mod metrics;
 pub mod region_info_accessor;
 mod split_check;
 pub mod split_observer;
-
+use protobuf::Message;
+use std::convert::TryInto;
 pub use self::{
     config::{Config, ConsistencyCheckMethod},
     consistency_check::{ConsistencyCheckObserver, Raw as RawConsistencyCheckObserver},
@@ -538,6 +539,21 @@ impl CmdBatch {
             }
         }
         cmd_bytes
+    }
+
+    pub fn real_size(&self) -> usize {
+        let mut cmd_bytes = 0;
+        for cmd in self.cmds.iter() {
+            let Cmd {
+                ref request,
+                ref response,
+                ..
+            } = cmd;
+
+            cmd_bytes += request.compute_size();
+            cmd_bytes += response.compute_size();
+        }
+        cmd_bytes.try_into().unwrap()
     }
 }
 

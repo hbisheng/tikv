@@ -51,16 +51,20 @@ impl<E: KvEngine> CmdObserver<E> for Observer {
         _: &E,
     ) {
         if max_level == ObserveLevel::None {
+            info!("===== on_flush_applied_cmd_batch, thrown away");
             return;
         }
         let cmd_batches: Vec<_> = std::mem::take(cmd_batches)
             .into_iter()
             .filter_map(lock_only_filter)
             .collect();
+        let size = cmd_batches.iter().map(|b| b.size()).sum::<usize>();
+        let real_size = cmd_batches.iter().map(|b| b.real_size()).sum::<usize>();
+        info!("===== on_flush_applied_cmd_batch,  Size: {}, Real size: {}", size, real_size);
+        
         if cmd_batches.is_empty() {
             return;
         }
-        let size = cmd_batches.iter().map(|b| b.size()).sum::<usize>();
         RTS_CHANNEL_PENDING_CMD_BYTES.add(size as i64);
         if let Err(e) = self.scheduler.schedule(Task::ChangeLog {
             cmd_batch: cmd_batches,

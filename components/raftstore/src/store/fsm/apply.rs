@@ -350,6 +350,8 @@ pub trait Notifier<EK: KvEngine>: Send {
     fn clone_box(&self) -> Box<dyn Notifier<EK>>;
 }
 
+use protobuf::Message;
+
 struct ApplyContext<EK>
 where
     EK: KvEngine,
@@ -494,6 +496,11 @@ where
     /// `prepare_for` -> `commit` [-> `commit` ...] -> `finish_for`.
     /// After all delegates are handled, `write_to_db` method should be called.
     pub fn prepare_for(&mut self, delegate: &mut ApplyDelegate<EK>) {
+        info!(
+            "===== prepare_for, region_id: {}, delegate.observe_info: {:?}", 
+            delegate.region.get_id(), 
+            delegate.observe_info,
+        );
         self.applied_batch
             .push_batch(&delegate.observe_info, delegate.region.get_id());
     }
@@ -597,8 +604,50 @@ where
         } = mem::replace(&mut self.applied_batch, ApplyCallbackBatch::new());
         // Call it before invoking callback for preventing Commit is executed before
         // Prewrite is observed.
+
+        let size = cmd_batch.iter().map(|b| b.size()).sum::<usize>();
+        let real_size = cmd_batch.iter().map(|b| b.real_size()).sum::<usize>();
+        info!("===== apply.rs, command batches cnt:{}, Size: {}, Real size: {}", cmd_batch.len(), size, real_size);
+        let mut cmd_type_frequency: HashMap<(CmdType, &str), usize> = HashMap::default();
+        let mut cmd_type_size: HashMap<(CmdType, &str), u32> = HashMap::default();
+        for batch in cmd_batch.iter() {
+            for cmd in &batch.cmds {
+                if cmd.request.has_admin_request() {
+                    let admin_cmd_type = cmd.request.get_admin_request().get_cmd_type();
+                    info!("===== apply.rs, Admin Command type: {:?}", admin_cmd_type);
+                }
+
+                for request in cmd.request.get_requests() {
+                    let cmd_type = request.get_cmd_type();
+
+                    let cf = match request.get_cmd_type() {
+                        CmdType::Put => request.get_put().cf.as_str(),
+                        CmdType::Delete => request.get_delete().cf.as_str(),
+                        _ => "default",
+                    };
+                    *cmd_type_frequency.entry((cmd_type, cf)).or_insert(0) += 1;
+                    *cmd_type_size.entry((cmd_type, cf)).or_insert(0) += request.compute_size();
+                }
+            }
+        }
+        for ((cmd_type, cf), count) in &cmd_type_frequency {
+            info!(
+                "===== apply.rs, Command type frequency: {:?} (cf: {}) -> {}",
+                cmd_type, cf, count
+            );
+        }
+
+        for ((cmd_type, cf), size) in &cmd_type_size {
+            info!(
+                "===== apply.rs, Command type size: {:?} (cf: {}) -> {}",
+                cmd_type, cf, size
+            );
+        }
+        info!("===== apply.rs, batch_max_level: {:?}", batch_max_level);
+
         self.host
             .on_flush_applied_cmd_batch(batch_max_level, cmd_batch, &self.engine);
+
         // Invoke callbacks
         let now = std::time::Instant::now();
         for (cb, resp) in cb_batch.drain(..) {
@@ -4634,6 +4683,7 @@ mod tests {
     };
     use txn_types::WriteBatchFlags;
     use uuid::Uuid;
+use std::collections::HashMap;
 
     use super::*;
     use crate::{

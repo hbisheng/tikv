@@ -379,6 +379,7 @@ pub struct Endpoint<T, E: KvEngine> {
     scan_concurrency_semaphore: Arc<Semaphore>,
     scheduler: Scheduler<Task>,
     advance_worker: AdvanceTsWorker,
+    start_ts: Instant,
     _phantom: PhantomData<(T, E)>,
 }
 
@@ -683,6 +684,7 @@ where
             scanner_pool,
             scan_concurrency_semaphore,
             regions: HashMap::default(),
+            start_ts: Instant::now(),
             _phantom: PhantomData::default(),
         };
         ep.handle_advance_resolved_ts(leader_resolver);
@@ -1099,6 +1101,8 @@ impl fmt::Display for Task {
     }
 }
 
+use std::time::Instant;
+
 impl<T, E> Runnable for Endpoint<T, E>
 where
     T: 'static + RaftStoreRouter<E>,
@@ -1107,11 +1111,25 @@ where
     type Task = Task;
 
     fn run(&mut self, task: Task) {
+        let now = Instant::now();
+        info!("***** run is called *****, store_id: {}", self.get_or_init_store_id().unwrap_or(0));
+        if let Some(store_id) = self.get_or_init_store_id() && store_id == 1 {
+            if now.duration_since(self.start_ts) > Duration::from_secs(900) {
+                info!("***** entered the loop after 15 minutes *****");
+                loop {
+                    std::hint::black_box(1);
+                }
+            }
+        }
+
         debug!("run resolved-ts task"; "task" => ?task);
         match task {
             Task::RegionDestroyed(region) => self.region_destroyed(region),
             Task::RegionUpdated(region) => self.region_updated(region),
-            Task::RegisterRegion { region } => self.register_region(region, None),
+            Task::RegisterRegion { region } => {
+                info!("===== register_region: id {}", region.get_id());
+                self.register_region(region, None)
+            },
             Task::DeRegisterRegion { region_id } => self.deregister_region(region_id),
             Task::ReRegisterRegion {
                 region_id,

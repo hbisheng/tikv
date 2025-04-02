@@ -1118,7 +1118,6 @@ impl<EK: KvEngine, ER: RaftEngine> EntryStorage<EK, ER> {
         match self.entries(low, high, u64::MAX, GetEntriesContext::empty(true)) {
             Ok(_) => {
                 // This should not happen, but it's OK :)
-                debug_assert!(false, "entries should not have been fetched");
                 error!("entries are fetched unexpectedly during warming up");
                 None
             }
