@@ -1114,8 +1114,8 @@ where
         let now = Instant::now();
         info!("***** run is called *****, store_id: {}", self.get_or_init_store_id().unwrap_or(0));
         if let Some(store_id) = self.get_or_init_store_id() && store_id == 1 {
-            if now.duration_since(self.start_ts) > Duration::from_secs(900) {
-                info!("***** entered the loop after 15 minutes *****");
+            if now.duration_since(self.start_ts) > Duration::from_secs(180) {
+                info!("***** entered the loop after 3 minutes *****");
                 loop {
                     std::hint::black_box(1);
                 }
