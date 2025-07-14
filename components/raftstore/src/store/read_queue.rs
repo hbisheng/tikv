@@ -174,6 +174,7 @@ impl<C: ErrorCallback> ReadIndexQueue<C> {
     pub fn clear_uncommitted_on_role_change(&mut self, term: u64) {
         let mut removed = 0;
         for mut read in self.reads.drain(self.ready_cnt..) {
+            println!("draining in clear_uncommitted_on_role_change(): read {}", read.id);
             removed += read.cmds.len();
             for (_, cb, _) in read.cmds.drain(..) {
                 apply::notify_stale_req(term, cb);

@@ -2688,14 +2688,12 @@ where
         });
 
         let is_initialized_peer = self.fsm.peer.is_initialized();
-        debug!(
-            "handle raft message";
-            "region_id" => self.region_id(),
-            "peer_id" => self.fsm.peer_id(),
-            "message_type" => %util::MsgType(&msg),
-            "from_peer_id" => msg.get_from_peer().get_id(),
-            "to_peer_id" => msg.get_to_peer().get_id(),
-            "is_initialized_peer" => is_initialized_peer,
+        println!(
+            "[region {}][peer {}->{}] handle raft message: message_type={}, ",
+            self.region_id(),
+            msg.get_from_peer().get_id(),
+            msg.get_to_peer().get_id(),
+            util::MsgType(&msg),
         );
 
         let msg_type = msg.get_message().get_msg_type();

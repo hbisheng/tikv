@@ -598,6 +598,7 @@ fn test_batch_read_index_after_transfer_leader() {
     );
     cluster.sim.wl().add_recv_filter(2, response_recv_filter_2);
 
+    println!("--> cluster.must_transfer_leader(1, new_peer(2, 2))");
     cluster.must_transfer_leader(1, new_peer(2, 2));
 
     // Pause before collecting message to make the these message be handled in one
@@ -609,6 +610,7 @@ fn test_batch_read_index_after_transfer_leader() {
 
     let router = cluster.sim.wl().get_router(2).unwrap();
     for raft_msg in std::mem::take(&mut *dropped_msgs.lock().unwrap()) {
+        println!("--> router.send_raft_message(raft_msg.into()).unwrap(), msg: {:?}", raft_msg);
         #[allow(clippy::useless_conversion)]
         router.send_raft_message(raft_msg.into()).unwrap();
     }
@@ -616,20 +618,41 @@ fn test_batch_read_index_after_transfer_leader() {
     let mut resps = Vec::with_capacity(2);
     for _ in 0..2 {
         let epoch = cluster.get_region(b"k1").take_region_epoch();
-        let mut req = new_request(1, epoch, vec![new_read_index_cmd()], true);
+        let mut req = new_request(1, epoch, vec![new_read_index_cmd()], true /* read_quorum */);
         req.mut_header().set_peer(new_peer(2, 2));
 
         let (cb, rx) = make_cb_rocks(&req);
+
+        println!("--> sending read index cmd to node 2: {:?}", req);
         cluster.sim.rl().async_command_on_node(2, req, cb).unwrap();
         resps.push(rx);
     }
 
+    // intercept the heartbeat responses so read index requests get stuck
+    let response_recv_filter_2 = Box::new(
+        RegionPacketFilter::new(1, 2)
+            .direction(Direction::Recv)
+            .reserve_dropped(Arc::clone(&dropped_msgs))
+            .msg_type(MessageType::MsgHeartbeatResponse),
+    );
+    println!("--> add second recv_filter");
+    cluster.sim.wl().add_recv_filter(2, response_recv_filter_2);
+    // Will the interception work? 
+
+    println!("--> fail::remove(on_peer_collect_message_2) ");
     fail::remove(on_peer_collect_message_2);
+
+    println!("--> cluster.must_transfer_leader(1, new_peer(3, 3));");
+    cluster.must_transfer_leader(1, new_peer(3, 3));
+
+    println!("--> remove second recv_filter");
+    cluster.sim.wl().clear_recv_filters(2);
 
     let resps = resps
         .into_iter()
         .map(|mut x| x.recv_timeout(Duration::from_secs(5)).unwrap())
         .collect::<Vec<_>>();
+    println!("--> got all read index responses: {:?}", resps);
 
     // `term` in the header is `current_term`, not term of the entry at
     // `read_index`.
