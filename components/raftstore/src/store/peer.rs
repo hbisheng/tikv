@@ -3572,6 +3572,10 @@ where
     /// not a leader.
     fn post_pending_read_index_on_replica<T>(&mut self, ctx: &mut PollContext<EK, ER, T>) {
         while let Some(mut read) = self.pending_reads.pop_front() {
+            println!(
+                "poped in post_pending_read_index_on_replica(): read {}",
+                read.id
+            );
             // The response of this read index request is lost, but we need it for
             // the memory lock checking result. Resend the request.
             if let Some(read_index) = read.addition_request.take() {
@@ -3679,6 +3683,7 @@ where
             propose_time = self.pending_reads.last_ready().map(|r| r.propose_time);
             if self.ready_to_handle_read() {
                 while let Some(mut read) = self.pending_reads.pop_front() {
+                    println!("poped in apply_reads(): read {}", read.id);
                     self.response_read(&mut read, ctx, false);
                 }
             }
@@ -3689,6 +3694,14 @@ where
         if ready.ss().is_some() {
             let term = self.term();
             // all uncommitted reads will be dropped silently in raft.
+            if !self.pending_reads.reads.is_empty() {
+                if let Some(ss) = ready.ss() {
+                    println!(
+                        "[peer={}] about to clear uncommitted reads on role change, ready.ss(): {:?}",
+                        self.peer.id, ss
+                    );
+                }
+            }
             self.pending_reads.clear_uncommitted_on_role_change(term);
         }
 
@@ -3746,6 +3759,7 @@ where
             self.post_pending_read_index_on_replica(ctx)
         } else if self.ready_to_handle_read() {
             while let Some(mut read) = self.pending_reads.pop_front() {
+                println!("poped in post_apply(): read {}", read.id);
                 self.response_read(&mut read, ctx, false);
             }
         }
@@ -4215,6 +4229,7 @@ where
         let now = monotonic_raw_now();
         if self.is_leader() {
             let lease_state = self.inspect_lease();
+
             if can_amend_read::<Callback<EK::Snapshot>>(
                 self.pending_reads.back(),
                 &req,
@@ -4282,6 +4297,7 @@ where
             .filter(|req| req.has_read_index())
             .map(|req| req.take_read_index());
         let (id, dropped) = self.propose_read_index(request.as_ref());
+
         if dropped && self.is_leader() {
             // The message gets dropped silently, can't be handled anymore.
             apply::notify_stale_req(self.term(), cb);
@@ -4289,18 +4305,17 @@ where
             return false;
         }
 
+        println!(
+            "[peer {}] proposed read index: is_leader={}, request_id={:?}",
+            self.peer.get_id(),
+            self.is_leader(),
+            id,
+        );
+
         let mut read = ReadIndexRequest::with_command(id, req, cb, now);
         read.addition_request = request.map(Box::new);
         self.push_pending_read(read, self.is_leader());
         self.should_wake_up = true;
-
-        debug!(
-            "request to get a read index";
-            "request_id" => ?id,
-            "region_id" => self.region_id,
-            "peer_id" => self.peer.get_id(),
-            "is_leader" => self.is_leader(),
-        );
 
         // TimeoutNow has been sent out, so we need to propose explicitly to
         // update leader lease.

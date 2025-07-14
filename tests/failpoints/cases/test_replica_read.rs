@@ -915,3 +915,65 @@ fn test_read_index_cache() {
         Duration::from_millis(2000),
     );
 }
+
+#[test_case(test_raftstore::new_node_cluster)]
+fn test_replica_read_after_transfer_leader2() {
+    let mut cluster = new_cluster(0, 3);
+
+    configure_for_lease_read(&mut cluster.cfg, Some(50), Some(100));
+    cluster.cfg.raft_store.raft_store_max_leader_lease = ReadableDuration::millis(1000); // 1s read lease
+
+    let pd_client = Arc::clone(&cluster.pd_client);
+    pd_client.disable_default_operator();
+
+    let r = cluster.run_conf_change();
+    assert_eq!(r, 1);
+    pd_client.must_add_peer(1, new_peer(2, 2));
+    pd_client.must_add_peer(1, new_peer(3, 3));
+
+    cluster.must_put(b"k1", b"v2");
+
+    // Initial leader is peer 1
+    println!("--> Make peer 1 the leader");
+    cluster.must_transfer_leader(1, new_peer(1, 1));
+
+    // Sleep a while for the leader to set up progress for each follower.
+    sleep_ms(200);
+
+    // Stop peer 1 from receiving heartbeat and append responses.
+    let response_recv_filter_1 = Box::new(
+        RegionPacketFilter::new(1, 1)
+            .direction(Direction::Recv)
+            .msg_type(MessageType::MsgAppendResponse)
+            .msg_type(MessageType::MsgHeartbeatResponse),
+    );
+    cluster.sim.wl().add_recv_filter(1, response_recv_filter_1);
+
+    // Wait for lease expiration so quorum read is necessary.
+    sleep_ms(1000);
+
+    let region = cluster.get_region(b"k1");
+    println!("--> async_read on peer 3, timer started");
+    let t = std::time::Instant::now();
+    let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), region, b"k1", true, true);
+
+    // Wait peer 3 to send read index to peer 1
+    sleep_ms(100);
+
+    // Transfer leader to peer 2
+    println!("--> Make peer 2 the leader");
+    cluster.must_transfer_leader(1, new_peer(2, 2));
+
+    // cluster.sim.wl().clear_recv_filters(1);
+
+    let resp = block_on_timeout(resp_ch, Duration::from_secs(3)).unwrap();
+    println!(
+        "--> async_read on peer 3 returned response: {:?}, elapsed: {}ms",
+        resp,
+        t.elapsed().as_millis()
+    );
+
+    assert!(resp.get_responses().len() > 0);
+    let exp_value = resp.get_responses()[0].get_get().get_value();
+    assert_eq!(exp_value, b"v2");
+}
