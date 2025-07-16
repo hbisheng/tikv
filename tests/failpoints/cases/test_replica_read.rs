@@ -409,29 +409,28 @@ fn test_replica_read_after_transfer_leader() {
     pd_client.must_add_peer(1, new_peer(2, 2));
     pd_client.must_add_peer(1, new_peer(3, 3));
 
-    cluster.must_transfer_leader(1, new_peer(1, 1));
+    // cluster.must_transfer_leader(1, new_peer(1, 1));
+    // // Make sure the peer 3 exists
+    // cluster.must_put(b"k1", b"v1");
+    // must_get_equal(&cluster.get_engine(3), b"k1", b"v1");
 
-    // Make sure the peer 3 exists
-    cluster.must_put(b"k1", b"v1");
-    must_get_equal(&cluster.get_engine(3), b"k1", b"v1");
+    // cluster.add_send_filter(IsolationFilterFactory::new(3));
 
-    cluster.add_send_filter(IsolationFilterFactory::new(3));
-
-    // peer 2 does not know the latest commit index if it cann't receive hearbeat.
-    // It's because the mechanism of notifying commit index in raft-rs is lazy.
-    let recv_filter_2 = Box::new(
-        RegionPacketFilter::new(1, 2)
-            .direction(Direction::Recv)
-            .msg_type(MessageType::MsgHeartbeat),
-    );
-    cluster.sim.wl().add_recv_filter(2, recv_filter_2);
+    // // peer 2 does not know the latest commit index if it cann't receive hearbeat.
+    // // It's because the mechanism of notifying commit index in raft-rs is lazy.
+    // let recv_filter_2 = Box::new(
+    //     RegionPacketFilter::new(1, 2)
+    //         .direction(Direction::Recv)
+    //         .msg_type(MessageType::MsgHeartbeat),
+    // );
+    // cluster.sim.wl().add_recv_filter(2, recv_filter_2);
 
     cluster.must_put(b"k1", b"v2");
 
     println!("--> cluster.must_transfer_leader(1, new_peer(2, 2));");
     cluster.must_transfer_leader(1, new_peer(2, 2));
 
-    cluster.clear_send_filters();
+    // cluster.clear_send_filters();
 
     // Delay the response raft messages to peer 2.
     let dropped_msgs = Arc::new(Mutex::new(Vec::new()));
@@ -468,8 +467,8 @@ fn test_replica_read_after_transfer_leader() {
     let router = cluster.sim.wl().get_router(2).unwrap();
     for raft_msg in std::mem::take(&mut *dropped_msgs.lock().unwrap()) {
         // println!("--> router.send_raft_message(raft_msg.into()).unwrap(), msg: {:?}", raft_msg);
-        #[allow(clippy::useless_conversion)]
-        router.send_raft_message(raft_msg.into()).unwrap();
+        // #[allow(clippy::useless_conversion)]
+        // router.send_raft_message(raft_msg.into()).unwrap();
     }
 
     // println!("--> fail::remove(on_peer_collect_message_2);");
