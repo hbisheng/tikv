@@ -428,6 +428,11 @@ fn test_replica_read_after_transfer_leader() {
 
     cluster.must_put(b"k1", b"v2");
 
+    println!("--> cluster.must_transfer_leader(1, new_peer(2, 2));");
+    cluster.must_transfer_leader(1, new_peer(2, 2));
+
+    cluster.clear_send_filters();
+
     // Delay the response raft messages to peer 2.
     let dropped_msgs = Arc::new(Mutex::new(Vec::new()));
     let response_recv_filter_2 = Box::new(
@@ -439,35 +444,43 @@ fn test_replica_read_after_transfer_leader() {
     );
     cluster.sim.wl().add_recv_filter(2, response_recv_filter_2);
 
-    cluster.must_transfer_leader(1, new_peer(2, 2));
+    // Wait for lease expiration so quorum read is necessary. 
+    sleep_ms(5000);
 
-    cluster.clear_send_filters();
-
-    // Wait peer 1 and 3 to send heartbeat response to peer 2
-    sleep_ms(100);
     // Pause before collecting message to make the these message be handled in one
     // loop
-    let on_peer_collect_message_2 = "on_peer_collect_message_2";
-    fail::cfg(on_peer_collect_message_2, "pause").unwrap();
+    // let on_peer_collect_message_2 = "on_peer_collect_message_2";
+    // fail::cfg(on_peer_collect_message_2, "pause").unwrap();
+
+    let new_region = cluster.get_region(b"k1");
+    println!("--> async_read_on_peer 3 at {:?}", std::time::Instant::now());
+    let t = std::time::Instant::now();
+    let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), new_region, b"k1", true, true);
+    // Wait peer 2 to send read index to peer 1003
+    sleep_ms(100);
+
+
+    println!("--> cluster.must_transfer_leader(1, new_peer(1, 1));");
+    cluster.must_transfer_leader(1, new_peer(1, 1));
 
     cluster.sim.wl().clear_recv_filters(2);
 
     let router = cluster.sim.wl().get_router(2).unwrap();
     for raft_msg in std::mem::take(&mut *dropped_msgs.lock().unwrap()) {
+        // println!("--> router.send_raft_message(raft_msg.into()).unwrap(), msg: {:?}", raft_msg);
         #[allow(clippy::useless_conversion)]
         router.send_raft_message(raft_msg.into()).unwrap();
     }
 
-    let new_region = cluster.get_region(b"k1");
-    let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), new_region, b"k1", true, true);
-    // Wait peer 2 to send read index to peer 1003
-    sleep_ms(100);
-
-    fail::remove(on_peer_collect_message_2);
+    // println!("--> fail::remove(on_peer_collect_message_2);");
+    // fail::remove(on_peer_collect_message_2);
 
     let resp = block_on_timeout(resp_ch, Duration::from_secs(3)).unwrap();
+    println!("--> receive raft response {:?} at {:?}, elapsed: {}ms", resp, std::time::Instant::now(), t.elapsed().as_millis());
     let exp_value = resp.get_responses()[0].get_get().get_value();
     assert_eq!(exp_value, b"v2");
+
+    assert_eq!(1, 4-2);
 }
 
 // This test is for reproducing the bug that some replica reads was sent to a
