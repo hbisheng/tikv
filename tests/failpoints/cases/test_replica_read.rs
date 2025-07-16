@@ -416,7 +416,7 @@ fn test_replica_read_after_transfer_leader() {
     println!("--> Make peer 2 the leader");
     cluster.must_transfer_leader(1, new_peer(2, 2));
 
-    // Prevent peer 2 from receiving heartbeat and append responses. 
+    // Stop peer 2 from receiving heartbeat and append responses. 
     let response_recv_filter_2 = Box::new(
         RegionPacketFilter::new(1, 2)
             .direction(Direction::Recv)
@@ -426,10 +426,10 @@ fn test_replica_read_after_transfer_leader() {
     cluster.sim.wl().add_recv_filter(2, response_recv_filter_2);
 
     // Wait for lease expiration so quorum read is necessary. 
-    sleep_ms(1500);
+    sleep_ms(2000);
 
     let region = cluster.get_region(b"k1");
-    println!("--> async_read on peer 3");
+    println!("--> async_read on peer 3, timer started");
     let t = std::time::Instant::now();
     let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), region, b"k1", true, true);
     

@@ -2883,9 +2883,9 @@ where
         );
 
         let mut ready = self.raft_group.ready();
-        if ready.ss().is_some() {
-            println!("[peer {}] ready.ss(): {:?}", self.peer.get_id(), ready.ss());
-        }
+        // if let Some(ss) = ready.ss(){
+            // println!("[peer {}] ready.ss(): {:?}", self.peer.get_id(), ss);
+        // }
 
         self.add_ready_metric(&ready, &mut ctx.raft_metrics);
 
@@ -3695,7 +3695,9 @@ where
             let term = self.term();
             // all uncommitted reads will be dropped silently in raft.
             if !self.pending_reads.reads.is_empty() {
-                println!("[peer={}] about to clear uncommitted reads on role change, ready.ss(): {:?}", self.peer.id, ready.ss());
+                if let Some(ss) = ready.ss() {
+                    println!("[peer={}] about to clear uncommitted reads on role change, ready.ss(): {:?}", self.peer.id, ss);
+                }
             }
             self.pending_reads.clear_uncommitted_on_role_change(term);
         }
