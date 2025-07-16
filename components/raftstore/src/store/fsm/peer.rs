@@ -2688,13 +2688,16 @@ where
         });
 
         let is_initialized_peer = self.fsm.peer.is_initialized();
-        println!(
-            "[region {}][peer {}->{}] handle raft message: message_type={}, ",
-            self.region_id(),
-            msg.get_from_peer().get_id(),
-            msg.get_to_peer().get_id(),
-            util::MsgType(&msg),
-        );
+
+        if msg.get_message().get_msg_type() == MessageType::MsgReadIndex || 
+            msg.get_message().get_msg_type() == MessageType::MsgReadIndexResp {
+            println!(
+                "[peer {}] handle raft message from {}: message_type={}",
+                msg.get_to_peer().get_id(),
+                msg.get_from_peer().get_id(),
+                util::MsgType(&msg),
+            );
+        }
 
         let msg_type = msg.get_message().get_msg_type();
         #[cfg(feature = "failpoints")]

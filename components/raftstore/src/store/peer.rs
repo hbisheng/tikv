@@ -2883,6 +2883,9 @@ where
         );
 
         let mut ready = self.raft_group.ready();
+        if ready.ss().is_some() {
+            println!("[peer {}] ready.ss(): {:?}", self.peer.get_id(), ready.ss());
+        }
 
         self.add_ready_metric(&ready, &mut ctx.raft_metrics);
 
@@ -3691,6 +3694,9 @@ where
         if ready.ss().is_some() {
             let term = self.term();
             // all uncommitted reads will be dropped silently in raft.
+            if !self.pending_reads.reads.is_empty() {
+                println!("[peer={}] about to clear uncommitted reads on role change, ready.ss(): {:?}", self.peer.id, ready.ss());
+            }
             self.pending_reads.clear_uncommitted_on_role_change(term);
         }
 
@@ -3879,7 +3885,7 @@ where
         mut err_resp: RaftCmdResponse,
         mut disk_full_opt: DiskFullOpt,
     ) -> bool {
-        println!("propose: {:?}", req);
+        // println!("propose: {:?}", req);
 
         if self.pending_remove {
             return false;
@@ -4289,21 +4295,19 @@ where
             .map(|req| req.take_read_index());
         let (id, dropped) = self.propose_read_index(request.as_ref());
 
-        println!(
-            "[region {}][peer {}] proposed read index: is_leader={}, request_id={:?}, dropped={}",
-            self.region_id,
-            self.peer.get_id(),
-            self.is_leader(),
-            id,
-            dropped,
-        );
-
         if dropped && self.is_leader() {
             // The message gets dropped silently, can't be handled anymore.
             apply::notify_stale_req(self.term(), cb);
             poll_ctx.raft_metrics.propose.dropped_read_index.inc();
             return false;
         }
+
+        println!(
+            "[peer {}] proposed read index: is_leader={}, request_id={:?}",
+            self.peer.get_id(),
+            self.is_leader(),
+            id,
+        );
 
         let mut read = ReadIndexRequest::with_command(id, req, cb, now);
         read.addition_request = request.map(Box::new);

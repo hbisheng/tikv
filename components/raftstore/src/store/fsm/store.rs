@@ -2244,14 +2244,14 @@ impl<EK: KvEngine, ER: RaftEngine, T: Transport> StoreFsmDelegate<'_, EK, ER, T>
             Err(_) => unreachable!(),
         };
 
-        println!(
-            "[region {}][peer {}->{}] handle raft message: message_type={}, store_id={}",
-            region_id,
-            msg.get_from_peer().get_id(),
-            msg.get_to_peer().get_id(),
-            util::MsgType(&msg),
-            self.fsm.store.id,
-        );
+        // println!(
+        //     "[region {}][peer {}->{}] handle raft message: message_type={}, store_id={}",
+        //     region_id,
+        //     msg.get_from_peer().get_id(),
+        //     msg.get_to_peer().get_id(),
+        //     util::MsgType(&msg),
+        //     self.fsm.store.id,
+        // );
         
         debug!(
             "handle raft message";

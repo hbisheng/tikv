@@ -400,6 +400,7 @@ fn test_replica_read_after_transfer_leader() {
     let mut cluster = new_cluster(0, 3);
 
     configure_for_lease_read(&mut cluster.cfg, Some(50), Some(100));
+    cluster.cfg.raft_store.raft_store_max_leader_lease = ReadableDuration::millis(2000); // 2s read lease
 
     let pd_client = Arc::clone(&cluster.pd_client);
     pd_client.disable_default_operator();
@@ -409,77 +410,44 @@ fn test_replica_read_after_transfer_leader() {
     pd_client.must_add_peer(1, new_peer(2, 2));
     pd_client.must_add_peer(1, new_peer(3, 3));
 
-    // cluster.must_transfer_leader(1, new_peer(1, 1));
-    // // Make sure the peer 3 exists
-    // cluster.must_put(b"k1", b"v1");
-    // must_get_equal(&cluster.get_engine(3), b"k1", b"v1");
-
-    // cluster.add_send_filter(IsolationFilterFactory::new(3));
-
-    // // peer 2 does not know the latest commit index if it cann't receive hearbeat.
-    // // It's because the mechanism of notifying commit index in raft-rs is lazy.
-    // let recv_filter_2 = Box::new(
-    //     RegionPacketFilter::new(1, 2)
-    //         .direction(Direction::Recv)
-    //         .msg_type(MessageType::MsgHeartbeat),
-    // );
-    // cluster.sim.wl().add_recv_filter(2, recv_filter_2);
-
     cluster.must_put(b"k1", b"v2");
 
-    println!("--> cluster.must_transfer_leader(1, new_peer(2, 2));");
+    // Initial leader is peer 2
+    println!("--> Make peer 2 the leader");
     cluster.must_transfer_leader(1, new_peer(2, 2));
 
-    // cluster.clear_send_filters();
-
-    // Delay the response raft messages to peer 2.
-    let dropped_msgs = Arc::new(Mutex::new(Vec::new()));
+    // Prevent peer 2 from receiving heartbeat and append responses. 
     let response_recv_filter_2 = Box::new(
         RegionPacketFilter::new(1, 2)
             .direction(Direction::Recv)
-            .reserve_dropped(Arc::clone(&dropped_msgs))
             .msg_type(MessageType::MsgAppendResponse)
             .msg_type(MessageType::MsgHeartbeatResponse),
     );
     cluster.sim.wl().add_recv_filter(2, response_recv_filter_2);
 
     // Wait for lease expiration so quorum read is necessary. 
-    sleep_ms(5000);
+    sleep_ms(1500);
 
-    // Pause before collecting message to make the these message be handled in one
-    // loop
-    // let on_peer_collect_message_2 = "on_peer_collect_message_2";
-    // fail::cfg(on_peer_collect_message_2, "pause").unwrap();
-
-    let new_region = cluster.get_region(b"k1");
-    println!("--> async_read_on_peer 3 at {:?}", std::time::Instant::now());
+    let region = cluster.get_region(b"k1");
+    println!("--> async_read on peer 3");
     let t = std::time::Instant::now();
-    let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), new_region, b"k1", true, true);
-    // Wait peer 2 to send read index to peer 1003
+    let resp_ch = async_read_on_peer(&mut cluster, new_peer(3, 3), region, b"k1", true, true);
+    
+    // Wait peer 3 to send read index to peer 2
     sleep_ms(100);
 
-
-    println!("--> cluster.must_transfer_leader(1, new_peer(1, 1));");
+    // Transfer leader to peer 1
+    println!("--> Make peer 1 the leader");
     cluster.must_transfer_leader(1, new_peer(1, 1));
 
-    cluster.sim.wl().clear_recv_filters(2);
-
-    let router = cluster.sim.wl().get_router(2).unwrap();
-    for raft_msg in std::mem::take(&mut *dropped_msgs.lock().unwrap()) {
-        // println!("--> router.send_raft_message(raft_msg.into()).unwrap(), msg: {:?}", raft_msg);
-        // #[allow(clippy::useless_conversion)]
-        // router.send_raft_message(raft_msg.into()).unwrap();
-    }
-
-    // println!("--> fail::remove(on_peer_collect_message_2);");
-    // fail::remove(on_peer_collect_message_2);
+    // cluster.sim.wl().clear_recv_filters(2);
 
     let resp = block_on_timeout(resp_ch, Duration::from_secs(3)).unwrap();
-    println!("--> receive raft response {:?} at {:?}, elapsed: {}ms", resp, std::time::Instant::now(), t.elapsed().as_millis());
+    println!("--> async_read on peer 3 returned response: {:?}, elapsed: {}ms", resp, t.elapsed().as_millis());
+    
+    assert!(resp.get_responses().len() > 0);
     let exp_value = resp.get_responses()[0].get_get().get_value();
     assert_eq!(exp_value, b"v2");
-
-    assert_eq!(1, 4-2);
 }
 
 // This test is for reproducing the bug that some replica reads was sent to a
