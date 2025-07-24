@@ -2687,6 +2687,12 @@ where
             }
         });
 
+        println!(
+            "[region={}][peer={}] should_bcast_commit={}, handle raft message: {:?}",
+            self.region_id(), self.fsm.peer_id(), 
+            self.fsm.peer.raft_group.raft.should_bcast_commit(), &msg
+        );
+        
         let is_initialized_peer = self.fsm.peer.is_initialized();
         debug!(
             "handle raft message";

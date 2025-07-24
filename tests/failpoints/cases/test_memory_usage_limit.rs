@@ -175,6 +175,7 @@ fn test_memory_full_cause_of_raft_message() {
 
 #[test]
 fn test_evict_early_avoids_reject() {
+    test_util::init_log_for_test();
     let mut cluster = setup_server_cluster();
     // Set a long lifetime to avoid clearing the entry cache based on time.
     cluster.cfg.raft_store.raft_entry_cache_life_time = ReadableDuration::secs(1000);
@@ -228,4 +229,5 @@ fn test_evict_early_avoids_reject() {
         entry_cache_size_after < entry_cache_size_before,
         "Entry cache should be evicted after the second round of insertions"
     );
+    sleep_ms(2000);
 }
