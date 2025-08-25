@@ -5,9 +5,11 @@ use grpcio_health::{HealthClient, ServingStatus, proto::HealthCheckRequest};
 use service::service_event::ServiceEvent;
 use test_pd::Server as MockServer;
 use tikv::config::TikvConfig;
+use test_util::init_log_for_test;
 
 #[test]
 fn test_restart_grpc_service() {
+    init_log_for_test();
     fail::cfg("mock_force_uninitial_logger", "return").unwrap();
     let check_heath_api = |max_retry, client: &HealthClient| {
         let req = HealthCheckRequest {
@@ -44,7 +46,7 @@ fn test_restart_grpc_service() {
 
         pd_server.stop();
     });
-
+    
     let env = Arc::new(Environment::new(1));
     let channel = ChannelBuilder::new(env).connect(&addr);
     let client: HealthClient = HealthClient::new(channel);
