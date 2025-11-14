@@ -1490,7 +1490,6 @@ impl DbConfig {
     pub fn optimize_for(&mut self, storage_config: &StorageConfig) {
         match storage_config.engine {
             EngineType::RaftKv => {
-                self.allow_concurrent_memtable_write.get_or_insert(true);
                 self.max_total_wal_size.get_or_insert(ReadableSize::gb(4));
                 self.stats_dump_period
                     .get_or_insert(ReadableDuration::minutes(10));
