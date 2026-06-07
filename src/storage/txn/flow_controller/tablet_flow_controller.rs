@@ -41,6 +41,16 @@ impl<EK: Clone> TabletFlowFactorStore<EK> {
             .and_then(|mut c| c.latest().and_then(|t| f(t).ok().flatten()))
             .unwrap_or(0)
     }
+
+    fn query_opt(
+        &self,
+        region_id: u64,
+        f: impl Fn(&EK) -> engine_traits::Result<Option<u64>>,
+    ) -> Option<u64> {
+        self.registry
+            .get(region_id)
+            .and_then(|mut c| c.latest().and_then(|t| f(t).ok().flatten()))
+    }
 }
 
 impl<EK: CfNamesExt + FlowControlFactorsExt + Clone> FlowControlFactorStore
@@ -60,6 +70,9 @@ impl<EK: CfNamesExt + FlowControlFactorsExt + Clone> FlowControlFactorStore
     }
     fn pending_compaction_bytes(&self, region_id: u64, cf: &str) -> u64 {
         self.query(region_id, |t| t.get_cf_pending_compaction_bytes(cf))
+    }
+    fn base_level(&self, region_id: u64, cf: &str) -> Option<u64> {
+        self.query_opt(region_id, |t| t.get_cf_base_level(cf))
     }
 }
 
