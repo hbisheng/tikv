@@ -659,18 +659,23 @@ impl<E: FlowControlFactorStore + Send + 'static> FlowChecker<E> {
                 }
             }
 
-            let pending_compaction_bytes = long_term_pending_bytes.get_avg();
+            let avg_pending_compaction_bytes = long_term_pending_bytes.get_avg();
             let ignore_unsafe_destroy_range =
                 if let Some(before) = checker.pending_bytes_before_unsafe_destroy_range {
                     // It assumes that the long term average will eventually come down below the
                     // soft limit. If the general traffic flow increases during destroy, the long
                     // term average may never come down and the flow control will be turned off for
                     // a long time, which would be a rather rare case, so just ignore it.
-                    if pending_compaction_bytes <= before && !self.wait_for_destroy_range_finish {
+                    let recent_pending_compaction_bytes = long_term_pending_bytes.get_recent();
+                    if avg_pending_compaction_bytes <= before
+                        && recent_pending_compaction_bytes < soft
+                        && !self.wait_for_destroy_range_finish
+                    {
                         info!(
                             "pending compaction bytes is back to normal";
                             "cf" => &cf,
-                            "pending_compaction_bytes" => pending_compaction_bytes,
+                            "avg_pending_compaction_bytes" => avg_pending_compaction_bytes,
+                            "recent_pending_compaction_bytes" => recent_pending_compaction_bytes,
                             "before" => before
                         );
                         checker.pending_bytes_before_unsafe_destroy_range = None;
@@ -685,11 +690,11 @@ impl<E: FlowControlFactorStore + Send + 'static> FlowChecker<E> {
                 // It assumes that the long term average will eventually come down below the
                 // pre-transition level. If the spike lasts across enough compaction samples,
                 // regard it as real compaction pressure and resume normal flow control.
-                if pending_compaction_bytes <= before {
+                if avg_pending_compaction_bytes <= before {
                     info!(
                         "pending compaction bytes is back to normal after base level transition";
                         "cf" => &cf,
-                        "pending_compaction_bytes" => pending_compaction_bytes,
+                        "avg_pending_compaction_bytes" => avg_pending_compaction_bytes,
                         "before" => before
                     );
                     checker.pending_bytes_before_base_level_transition = None;
@@ -707,7 +712,7 @@ impl<E: FlowControlFactorStore + Send + 'static> FlowChecker<E> {
                     info!(
                         "pending compaction bytes remains high after base level transition";
                         "cf" => &cf,
-                        "pending_compaction_bytes" => pending_compaction_bytes,
+                        "avg_pending_compaction_bytes" => avg_pending_compaction_bytes,
                         "before" => before,
                         "samples" => checker.pending_bytes_base_level_transition_samples,
                     );
@@ -778,10 +783,10 @@ impl<E: FlowControlFactorStore + Send + 'static> FlowChecker<E> {
                 }
             }
 
-            let mut ratio = if pending_compaction_bytes < soft || ignore {
+            let mut ratio = if avg_pending_compaction_bytes < soft || ignore {
                 0
             } else {
-                let new_ratio = (pending_compaction_bytes - soft) / (hard - soft);
+                let new_ratio = (avg_pending_compaction_bytes - soft) / (hard - soft);
                 let old_ratio = self.discard_ratio.load(Ordering::Relaxed);
 
                 // Because pending compaction bytes changes up and down, so using
@@ -1505,6 +1510,67 @@ pub(super) mod tests {
         send_flow_info(&tx, region_id);
         send_flow_info(&tx, region_id);
         assert!(flow_controller.discard_ratio(region_id) > f64::EPSILON);
+    }
+
+    #[test]
+    fn test_flow_controller_pending_compaction_bytes_unsafe_destroy_range_keeps_high_recent() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+
+        let config = FlowControlConfig::default();
+        let soft = (config.soft_pending_compaction_bytes_limit.0 as f64).log2();
+        let stub = EngineStub::new();
+        let discard_ratio = Arc::new(AtomicU32::new(0));
+        let mut checker = FlowChecker::new(
+            Arc::new(VersionTrack::new(config)),
+            stub,
+            discard_ratio.clone(),
+            Arc::new(Limiter::new(f64::INFINITY)),
+        );
+
+        let high_pending_bytes = 555 * GIB;
+        let high_pending_bytes_log = (high_pending_bytes as f64).log2();
+        let before_target = ((41 * GIB) as f64).log2();
+        let low_pending_bytes_log = (before_target * 1024.0 - high_pending_bytes_log) / 1023.0;
+        let before;
+        {
+            let cf_checker = checker.cf_checkers.get_mut("default").unwrap();
+            cf_checker.on_start_pending_bytes = false;
+
+            let long_term_pending_bytes = cf_checker.long_term_pending_bytes.as_mut().unwrap();
+            long_term_pending_bytes.observe(high_pending_bytes_log);
+            for _ in 1..1024 {
+                long_term_pending_bytes.observe(low_pending_bytes_log);
+            }
+
+            before = long_term_pending_bytes.get_avg();
+            assert!(before < soft);
+            assert!(long_term_pending_bytes.get_recent() < soft);
+            cf_checker.pending_bytes_before_unsafe_destroy_range = Some(before);
+        }
+
+        checker.on_pending_compaction_bytes_change_cf(high_pending_bytes, "default".to_string());
+        {
+            let cf_checker = checker.cf_checkers.get("default").unwrap();
+            let long_term_pending_bytes = cf_checker.long_term_pending_bytes.as_ref().unwrap();
+            assert!(long_term_pending_bytes.get_avg() <= before + f64::EPSILON);
+            assert!(long_term_pending_bytes.get_recent() >= soft);
+            assert!(
+                cf_checker
+                    .pending_bytes_before_unsafe_destroy_range
+                    .is_some()
+            );
+        }
+        assert_eq!(discard_ratio.load(Ordering::Relaxed), 0);
+
+        checker.on_pending_compaction_bytes_change_cf(GIB, "default".to_string());
+        assert!(
+            checker
+                .cf_checkers
+                .get("default")
+                .unwrap()
+                .pending_bytes_before_unsafe_destroy_range
+                .is_none()
+        );
     }
 
     #[test]
