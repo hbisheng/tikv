@@ -199,6 +199,7 @@ pub mod tests {
     };
     use crate::storage::{
         Engine,
+        kv::Modify,
         mvcc::{MvccTxn, tests::*},
     };
     #[cfg(test)]
@@ -734,5 +735,192 @@ pub mod tests {
         // No commit record should be written for the pessimistic lock
         // (it was rolled back, not committed)
         must_not_have_write(&mut engine, key, commit_ts);
+    }
+
+    #[test]
+    #[ignore = "requires tests/repro/issue-19891-rocksdb-hook.patch applied to rust-rocksdb"]
+    fn test_ingest_allow_write_can_make_pessimistic_commit_drop_mutation() {
+        use std::{env, fs, thread, time::Duration};
+
+        use engine_rocks::{RocksSstWriterBuilder, raw::IngestExternalFileOptions, util};
+        use engine_traits::{
+            CF_DEFAULT, CF_LOCK, CF_WRITE, KvEngine, MiscExt, Peekable, SnapshotMiscExt, SstWriter,
+            SstWriterBuilder,
+        };
+        use kvproto::kvrpcpb::{Assertion, AssertionLevel};
+        use tempfile::Builder;
+        use txn_types::{Mutation, parse_lock};
+
+        use crate::storage::txn::actions::prewrite::{
+            CommitKind, TransactionKind, TransactionProperties, prewrite,
+        };
+
+        const INGEST_SEQUENCE_PAUSE_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MS";
+        const INGEST_SEQUENCE_MARKER_ENV: &str =
+            "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER";
+
+        env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
+
+        let path_dir = Builder::new()
+            .prefix("test_pessimistic_commit_data_loss")
+            .tempdir()
+            .unwrap();
+        let marker_path = path_dir.path().join("after-last-sequence.marker");
+        env::set_var(INGEST_SEQUENCE_MARKER_ENV, marker_path.to_str().unwrap());
+
+        let mut engine = TestEngineBuilder::new()
+            .path(path_dir.path().join("db"))
+            .build()
+            .unwrap();
+        let rocks_db = engine.get_rocksdb();
+
+        let raw_key = b"k1";
+        let encoded_key = Key::from_raw(raw_key);
+        let start_ts = TimeStamp::new(10);
+        let for_update_ts = TimeStamp::new(20);
+        let commit_ts = TimeStamp::new(30);
+        let long_value = vec![b'v'; SHORT_VALUE_MAX_LEN + 1];
+
+        must_acquire_pessimistic_lock(&mut engine, raw_key, raw_key, start_ts, for_update_ts);
+
+        // Prepare a real pessimistic prewrite write batch before the ingest
+        // publish window. In a real request, the MVCC read phase can finish
+        // before this race; the acknowledged part is the RocksDB WriteBatch
+        // below returning success while ingest has already read LastSequence.
+        let prewrite_snapshot = engine.snapshot(Default::default()).unwrap();
+        let cm = ConcurrencyManager::new(start_ts);
+        let mut prewrite_txn = MvccTxn::new(start_ts, cm);
+        let mut prewrite_reader = SnapshotReader::new(start_ts, prewrite_snapshot, true);
+        prewrite(
+            &mut prewrite_txn,
+            &mut prewrite_reader,
+            &TransactionProperties {
+                start_ts,
+                kind: TransactionKind::Pessimistic(for_update_ts),
+                commit_kind: CommitKind::TwoPc,
+                primary: raw_key,
+                txn_size: 0,
+                lock_ttl: 0,
+                min_commit_ts: TimeStamp::zero(),
+                need_old_value: false,
+                is_retry_request: false,
+                assertion_level: AssertionLevel::Off,
+                txn_source: 0,
+            },
+            Mutation::Put((encoded_key.clone(), long_value.clone()), Assertion::None),
+            &None,
+            DoPessimisticCheck,
+            None,
+        )
+        .unwrap();
+        let prewrite_modifies = prewrite_txn.into_modifies();
+
+        let sst_path = path_dir.path().join("ingest.sst");
+        let mut sst = RocksSstWriterBuilder::new()
+            .set_db(&rocks_db)
+            .set_cf(CF_DEFAULT)
+            .build(sst_path.to_str().unwrap())
+            .unwrap();
+        sst.put(b"ingest-key", b"ingest-value").unwrap();
+        sst.finish().unwrap();
+
+        // Apply tests/repro/issue-19891-rocksdb-hook.patch to rust-rocksdb
+        // before running this ignored test.
+        let _pre_ingest_snapshot = rocks_db.snapshot();
+        let ingest_db = rocks_db.clone();
+        let ingest_path = sst_path.to_str().unwrap().to_owned();
+        let ingest_thread = thread::spawn(move || {
+            let cf = util::get_cf_handle(ingest_db.as_inner(), CF_DEFAULT).unwrap();
+            let mut opts = IngestExternalFileOptions::new();
+            opts.move_files(true);
+            opts.snapshot_consistent(true);
+            opts.allow_global_seqno(true);
+            opts.set_write_global_seqno(false);
+            opts.set_allow_write(true);
+            opts.allow_blocking_flush(true);
+            ingest_db
+                .as_inner()
+                .ingest_external_file_cf(cf, &opts, &[ingest_path.as_str()])
+                .unwrap()
+        });
+
+        let wait_started = std::time::Instant::now();
+        while !marker_path.exists() {
+            assert!(
+                wait_started.elapsed() < Duration::from_secs(10),
+                "RocksDB did not enter the ingest sequence update hook"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        write(&engine, &Context::default(), prewrite_modifies);
+        let seq_after_prewrite = rocks_db.get_latest_sequence_number();
+
+        ingest_thread.join().unwrap();
+        env::remove_var(INGEST_SEQUENCE_PAUSE_ENV);
+        env::remove_var(INGEST_SEQUENCE_MARKER_ENV);
+        let _ = fs::remove_file(&marker_path);
+
+        let seq_after_ingest = rocks_db.get_latest_sequence_number();
+        assert!(
+            seq_after_ingest < seq_after_prewrite,
+            "ingest should regress latest sequence below the acknowledged prewrite batch: after_ingest={}, after_prewrite={}",
+            seq_after_ingest,
+            seq_after_prewrite
+        );
+
+        let regressed_snapshot = rocks_db.snapshot();
+        assert_eq!(regressed_snapshot.sequence_number(), seq_after_ingest);
+        assert!(
+            regressed_snapshot
+                .get_value_cf(
+                    CF_DEFAULT,
+                    Key::from_raw(raw_key).append_ts(start_ts).as_encoded()
+                )
+                .unwrap()
+                .is_some(),
+            "the long value written by pessimistic prewrite is visible"
+        );
+        let visible_lock = regressed_snapshot
+            .get_value_cf(CF_LOCK, encoded_key.as_encoded())
+            .unwrap()
+            .unwrap();
+        match parse_lock(&visible_lock).unwrap() {
+            Either::Left(lock) => assert!(
+                lock.is_pessimistic_lock(),
+                "commit should see the stale pessimistic lock, got {:?}",
+                lock
+            ),
+            Either::Right(shared_locks) => panic!("unexpected shared locks: {:?}", shared_locks),
+        }
+
+        let commit_snapshot = engine.snapshot(Default::default()).unwrap();
+        let cm = ConcurrencyManager::new(start_ts);
+        let mut txn = MvccTxn::new(start_ts, cm);
+        let mut reader = SnapshotReader::new(start_ts, commit_snapshot, true);
+        let released = commit(&mut txn, &mut reader, encoded_key.clone(), commit_ts)
+            .unwrap()
+            .unwrap();
+        assert!(released.pessimistic);
+        assert_eq!(released.commit_ts, TimeStamp::zero());
+
+        let modifies = txn.into_modifies();
+        assert!(
+            modifies
+                .iter()
+                .all(|m| !matches!(m, Modify::Put(CF_WRITE, _, _))),
+            "commit should have dropped the mutation by not writing a commit record: {:?}",
+            modifies
+        );
+        match modifies.as_slice() {
+            [Modify::Delete(cf, key)] => {
+                assert_eq!(*cf, CF_LOCK);
+                assert_eq!(key, &encoded_key);
+            }
+            other => panic!("commit should only delete the stale lock, got {:?}", other),
+        }
+
+        write(&engine, &Context::default(), modifies);
+        must_not_have_write(&mut engine, raw_key, commit_ts);
     }
 }
