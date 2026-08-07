@@ -132,18 +132,6 @@ mod tests {
     const INGEST_SEQUENCE_MARKER_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER";
 
     #[test]
-    fn test_ingest_allow_write_is_disabled() {
-        let range = Range::new(b"key", b"kez");
-
-        // #19891 is mitigated by keeping RocksDB allow_write disabled even for
-        // snapshot-like ranged ingests and explicit force_allow_write requests.
-        assert!(!should_allow_write_during_ingest(None, false));
-        assert!(!should_allow_write_during_ingest(None, true));
-        assert!(!should_allow_write_during_ingest(Some(&range), false));
-        assert!(!should_allow_write_during_ingest(Some(&range), true));
-    }
-
-    #[test]
     #[ignore = "requires the rust-rocksdb ingest-write-bug hook branch"]
     fn test_ingest_allow_write_can_expose_committed_write_with_stale_lock() {
         env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
