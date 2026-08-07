@@ -3043,89 +3043,77 @@ mod tests {
         must_load_shared_lock(&mut engine, key);
     }
 
+    #[cfg(feature = "failpoints")]
     #[test]
-    #[ignore = "requires the rust-rocksdb ingest-write-bug hook branch"]
+    #[ignore = "requires --features failpoints and the rust-rocksdb ingest-write-bug hook branch"]
     fn test_ingest_allow_write_can_make_optimistic_prewrite_miss_write_conflict() {
-        use std::{env, fs, thread, time::Duration};
+        use std::{
+            env, fs,
+            sync::{
+                Arc, Mutex,
+                mpsc::{Receiver, sync_channel},
+            },
+            thread,
+            time::Duration,
+        };
 
         use engine_rocks::{RocksSstWriterBuilder, raw::IngestExternalFileOptions, util};
-        use engine_traits::{
-            CF_DEFAULT, CF_LOCK, CF_WRITE, KvEngine, MiscExt, SstWriter, SstWriterBuilder,
-        };
+        use engine_traits::{CF_DEFAULT, KvEngine, MiscExt, SstWriter, SstWriterBuilder};
+        use kvproto::kvrpcpb::AssertionLevel;
         use tempfile::Builder;
 
-        use crate::storage::kv::Modify;
+        use crate::storage::TestStorageBuilderApiV1;
 
         const INGEST_SEQUENCE_PAUSE_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MS";
         const INGEST_SEQUENCE_MARKER_ENV: &str =
             "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER";
+        const SCHEDULER_BEFORE_ASYNC_WRITE_FP: &str = "txn_scheduler_before_async_write";
 
         fn put(key: &[u8], value: &[u8]) -> Mutation {
             Mutation::make_put(Key::from_raw(key), value.to_vec())
         }
 
-        fn collect_prewrite_modifies<S: Snapshot>(
-            snapshot: S,
-            statistics: &mut Statistics,
+        fn prewrite_1pc_command(
             mutations: Vec<Mutation>,
             primary: Vec<u8>,
             start_ts: u64,
-        ) -> Result<Vec<Modify>> {
-            let cmd = Prewrite::with_defaults(mutations, primary, TimeStamp::from(start_ts));
-            let lock_mgr = MockLockManager::new();
-            let context = WriteContext {
-                lock_mgr: &lock_mgr,
-                concurrency_manager: ConcurrencyManager::new(start_ts.into()),
-                extra_op: ExtraOp::Noop,
-                statistics,
-                async_apply_prewrite: false,
-                raw_ext: None,
-                txn_status_cache: Arc::new(TxnStatusCache::new_for_test()),
-            };
-            let ret = cmd.cmd.process_write(snapshot, context)?;
-            match ret.pr {
-                ProcessResult::PrewriteResult { result } => {
-                    assert!(result.locks.is_empty(), "{:?}", result.locks);
-                }
-                other => panic!("unexpected prewrite result: {:?}", other),
-            }
-            Ok(ret.to_be_write.modifies)
-        }
-
-        fn collect_commit_modifies<S: Snapshot>(
-            snapshot: S,
-            statistics: &mut Statistics,
-            keys: Vec<Key>,
-            lock_ts: u64,
-            commit_ts: u64,
-        ) -> Result<Vec<Modify>> {
-            let cmd = crate::storage::txn::commands::Commit::new(
-                keys,
-                TimeStamp::from(lock_ts),
-                TimeStamp::from(commit_ts),
+            min_commit_ts: u64,
+            max_commit_ts: u64,
+        ) -> TypedCommand<PrewriteResult> {
+            let txn_size = mutations.len() as u64;
+            Prewrite::new(
+                mutations,
+                primary,
+                TimeStamp::from(start_ts),
+                0,
+                false,
+                txn_size,
+                TimeStamp::from(min_commit_ts),
+                TimeStamp::from(max_commit_ts),
+                None,
+                true,
+                AssertionLevel::Off,
                 Context::default(),
-            );
-            let lock_mgr = MockLockManager::new();
-            let context = WriteContext {
-                lock_mgr: &lock_mgr,
-                concurrency_manager: ConcurrencyManager::new(lock_ts.into()),
-                extra_op: ExtraOp::Noop,
-                statistics,
-                async_apply_prewrite: false,
-                raw_ext: None,
-                txn_status_cache: Arc::new(TxnStatusCache::new_for_test()),
-            };
-            let ret = cmd.cmd.process_write(snapshot, context)?;
-            match ret.pr {
-                ProcessResult::TxnStatus { txn_status } => {
-                    assert_eq!(txn_status, TxnStatus::committed(TimeStamp::from(commit_ts)));
-                }
-                other => panic!("unexpected commit result: {:?}", other),
-            }
-            Ok(ret.to_be_write.modifies)
+            )
         }
 
-        env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
+        fn recv_prewrite_result(
+            rx: &Receiver<crate::storage::Result<PrewriteResult>>,
+            description: &str,
+        ) -> PrewriteResult {
+            let result = rx
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or_else(|err| panic!("{description} did not finish: {err:?}"))
+                .unwrap();
+            assert!(result.locks.is_empty(), "{:?}", result.locks);
+            assert!(
+                !result.one_pc_commit_ts.is_zero(),
+                "{description} should commit with 1PC"
+            );
+            result
+        }
+
+        env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "2000");
 
         let path_dir = Builder::new()
             .prefix("test_optimistic_prewrite_miss_write_conflict")
@@ -3139,123 +3127,70 @@ mod tests {
             .build()
             .unwrap();
         let rocks_db = engine.get_rocksdb();
-        let mut statistics = Statistics::default();
+        let storage = TestStorageBuilderApiV1::from_engine_and_lock_mgr(
+            engine.clone(),
+            MockLockManager::new(),
+        )
+        .build()
+        .unwrap();
 
         let account_a = b"optimistic-account-a";
         let account_b = b"optimistic-account-b";
         let account_c = b"optimistic-account-c";
-        let account_a_key = Key::from_raw(account_a);
-        let account_b_key = Key::from_raw(account_b);
         let account_c_key = Key::from_raw(account_c);
 
         let init_start_ts = 5;
-        let init_commit_ts = 6;
         let txn_a_start_ts = 10;
         let txn_b_start_ts = 15;
-        let txn_a_commit_ts = 20;
-        let txn_b_commit_ts = 30;
+        let txn_a_min_commit_ts = 20;
+        let txn_b_min_commit_ts = 30;
+        let max_commit_ts = 100;
 
-        prewrite(
-            &mut engine,
-            &mut statistics,
-            vec![
-                put(account_a, b"100"),
-                put(account_b, b"100"),
-                put(account_c, b"0"),
-            ],
-            account_a.to_vec(),
-            init_start_ts,
-            None,
-        )
-        .unwrap();
-        commit(
-            &mut engine,
-            &mut statistics,
-            vec![
-                Key::from_raw(account_a),
-                Key::from_raw(account_b),
-                Key::from_raw(account_c),
-            ],
-            init_start_ts,
-            init_commit_ts,
-        )
-        .unwrap();
+        let (init_tx, init_rx) = sync_channel(1);
+        storage
+            .sched_txn_command(
+                prewrite_1pc_command(
+                    vec![
+                        put(account_a, b"100"),
+                        put(account_b, b"100"),
+                        put(account_c, b"0"),
+                    ],
+                    account_a.to_vec(),
+                    init_start_ts,
+                    init_start_ts + 1,
+                    max_commit_ts,
+                ),
+                Box::new(move |res| init_tx.send(res).unwrap()),
+            )
+            .unwrap();
+        recv_prewrite_result(&init_rx, "init 1PC prewrite");
         must_get(&mut engine, account_c, txn_b_start_ts, b"0");
 
-        // Generate txn A's real prewrite/commit batches on an equivalent engine,
-        // then apply those already-acknowledged batches during the ingest window.
-        let mut batch_engine = TestEngineBuilder::new()
-            .path(path_dir.path().join("batch-db"))
-            .build()
-            .unwrap();
-        let mut batch_statistics = Statistics::default();
-        prewrite(
-            &mut batch_engine,
-            &mut batch_statistics,
-            vec![
-                put(account_a, b"100"),
-                put(account_b, b"100"),
-                put(account_c, b"0"),
-            ],
-            account_a.to_vec(),
-            init_start_ts,
-            None,
-        )
-        .unwrap();
-        commit(
-            &mut batch_engine,
-            &mut batch_statistics,
-            vec![
-                account_a_key.clone(),
-                account_b_key.clone(),
-                account_c_key.clone(),
-            ],
-            init_start_ts,
-            init_commit_ts,
-        )
+        let (before_a_write_tx, before_a_write_rx) = sync_channel(1);
+        let (release_a_write_tx, release_a_write_rx) = sync_channel(0);
+        let release_a_write_rx = Arc::new(Mutex::new(release_a_write_rx));
+        fail::cfg_callback(SCHEDULER_BEFORE_ASYNC_WRITE_FP, move || {
+            let _ = before_a_write_tx.send(());
+            release_a_write_rx.lock().unwrap().recv().unwrap();
+        })
         .unwrap();
 
-        let txn_a_prewrite_modifies = collect_prewrite_modifies(
-            batch_engine.snapshot(Default::default()).unwrap(),
-            &mut batch_statistics,
-            vec![put(account_a, b"0"), put(account_c, b"100")],
-            account_a.to_vec(),
-            txn_a_start_ts,
-        )
-        .unwrap();
-        match txn_a_prewrite_modifies.as_slice() {
-            [Modify::Put(cf0, key0, _), Modify::Put(cf1, key1, _)] => {
-                assert_eq!(*cf0, CF_LOCK);
-                assert_eq!(key0, &account_a_key);
-                assert_eq!(*cf1, CF_LOCK);
-                assert_eq!(key1, &account_c_key);
-            }
-            other => panic!("unexpected txn A prewrite modifies: {:?}", other),
-        }
-        write(
-            &batch_engine,
-            &Context::default(),
-            txn_a_prewrite_modifies.clone(),
-        );
-        let txn_a_commit_modifies = collect_commit_modifies(
-            batch_engine.snapshot(Default::default()).unwrap(),
-            &mut batch_statistics,
-            vec![account_a_key.clone(), account_c_key.clone()],
-            txn_a_start_ts,
-            txn_a_commit_ts,
-        )
-        .unwrap();
-        assert!(
-            txn_a_commit_modifies.iter().any(|modify| matches!(
-                modify,
-                Modify::Put(CF_WRITE, key, _) if key
-                    == &account_c_key
-                        .clone()
-                        .append_ts(TimeStamp::from(txn_a_commit_ts))
-            )),
-            "txn A commit batch should contain account C's write record: {:?}",
-            txn_a_commit_modifies
-        );
+        let (txn_a_tx, txn_a_rx) = sync_channel(1);
+        storage
+            .sched_txn_command(
+                prewrite_1pc_command(
+                    vec![put(account_a, b"0"), put(account_c, b"100")],
+                    account_a.to_vec(),
+                    txn_a_start_ts,
+                    txn_a_min_commit_ts,
+                    max_commit_ts,
+                ),
+                Box::new(move |res| txn_a_tx.send(res).unwrap()),
+            )
+            .unwrap();
+        before_a_write_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("txn A did not reach scheduler before-async-write failpoint");
 
         let sst_path = path_dir.path().join("ingest.sst");
         let mut sst = RocksSstWriterBuilder::new()
@@ -3293,9 +3228,14 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
 
-        write(&engine, &Context::default(), txn_a_prewrite_modifies);
-        let seq_after_txn_a_prewrite = rocks_db.get_latest_sequence_number();
-        write(&engine, &Context::default(), txn_a_commit_modifies.clone());
+        release_a_write_tx.send(()).unwrap();
+        let txn_a_result = recv_prewrite_result(&txn_a_rx, "txn A 1PC prewrite");
+        fail::remove(SCHEDULER_BEFORE_ASYNC_WRITE_FP);
+        let txn_a_commit_ts = txn_a_result.one_pc_commit_ts;
+        assert!(
+            txn_a_commit_ts > TimeStamp::from(txn_b_start_ts),
+            "txn A commit_ts must be newer than txn B start_ts"
+        );
         let seq_after_txn_a_commit = rocks_db.get_latest_sequence_number();
 
         ingest_thread.join().unwrap();
@@ -3306,7 +3246,7 @@ mod tests {
         let seq_after_ingest = rocks_db.get_latest_sequence_number();
         assert!(
             seq_after_ingest < seq_after_txn_a_commit,
-            "ingest should regress latest sequence below txn A's acknowledged commit batch: after_ingest={}, after_txn_a_commit={}",
+            "ingest should regress latest sequence below txn A's acknowledged 1PC batch: after_ingest={}, after_txn_a_commit={}",
             seq_after_ingest,
             seq_after_txn_a_commit
         );
@@ -3320,45 +3260,41 @@ mod tests {
                 .unwrap()
                 .info()
                 .is_none(),
-            "bad snapshot should hide txn A's committed write on account C: after_prewrite={}, after_commit={}, after_ingest={}, commit_modifies={:?}",
-            seq_after_txn_a_prewrite,
+            "bad snapshot should hide txn A's committed write on account C: after_commit={}, after_ingest={}",
             seq_after_txn_a_commit,
-            seq_after_ingest,
-            txn_a_commit_modifies
+            seq_after_ingest
         );
         assert!(
             regressed_reader
                 .load_lock(&account_c_key)
                 .unwrap()
                 .is_none(),
-            "bad snapshot should not expose txn A's account C lock either"
+            "1PC should not leave a recoverable lock on account C"
         );
-        must_get(&mut engine, account_c, txn_a_commit_ts + 1, b"0");
+        must_get(&mut engine, account_c, txn_a_commit_ts.next(), b"0");
 
         // Txn B takes its snapshot after latest sequence regresses, so its
         // optimistic conflict check misses txn A's committed write on account C.
-        let txn_b_prewrite_modifies = collect_prewrite_modifies(
-            engine.snapshot(Default::default()).unwrap(),
-            &mut statistics,
-            vec![put(account_b, b"0"), put(account_c, b"100")],
-            account_b.to_vec(),
-            txn_b_start_ts,
-        )
-        .expect("txn B should incorrectly miss txn A's write conflict");
-        write(&engine, &Context::default(), txn_b_prewrite_modifies);
-        commit(
-            &mut engine,
-            &mut statistics,
-            vec![account_b_key.clone(), account_c_key.clone()],
-            txn_b_start_ts,
-            txn_b_commit_ts,
-        )
-        .unwrap();
+        let (txn_b_tx, txn_b_rx) = sync_channel(1);
+        storage
+            .sched_txn_command(
+                prewrite_1pc_command(
+                    vec![put(account_b, b"0"), put(account_c, b"100")],
+                    account_b.to_vec(),
+                    txn_b_start_ts,
+                    txn_b_min_commit_ts,
+                    max_commit_ts,
+                ),
+                Box::new(move |res| txn_b_tx.send(res).unwrap()),
+            )
+            .unwrap();
+        let txn_b_result = recv_prewrite_result(&txn_b_rx, "txn B 1PC prewrite");
+        let txn_b_commit_ts = txn_b_result.one_pc_commit_ts;
 
         must_get_commit_ts(&mut engine, account_c, txn_a_start_ts, txn_a_commit_ts);
         must_get_commit_ts(&mut engine, account_c, txn_b_start_ts, txn_b_commit_ts);
-        must_get(&mut engine, account_a, txn_b_commit_ts + 1, b"0");
-        must_get(&mut engine, account_b, txn_b_commit_ts + 1, b"0");
-        must_get(&mut engine, account_c, txn_b_commit_ts + 1, b"100");
+        must_get(&mut engine, account_a, txn_b_commit_ts.next(), b"0");
+        must_get(&mut engine, account_b, txn_b_commit_ts.next(), b"0");
+        must_get(&mut engine, account_c, txn_b_commit_ts.next(), b"100");
     }
 }

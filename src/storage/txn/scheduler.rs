@@ -1834,6 +1834,7 @@ impl<E: Engine, L: LockManager> TxnScheduler<E, L> {
             }
         });
 
+        fail_point!("txn_scheduler_before_async_write");
         let async_write_start = Instant::now_coarse();
         let mut res = unsafe {
             with_tls_engine(|e: &mut E| {
