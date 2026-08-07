@@ -492,4 +492,261 @@ pub mod tests {
         }
         must_unlocked(&mut engine, b"k1");
     }
+
+    #[test]
+    #[ignore = "requires the rust-rocksdb ingest-write-bug hook branch"]
+    fn test_ingest_allow_write_can_make_async_commit_recovery_rollback_prewrite() {
+        use std::{env, fs, thread, time::Duration};
+
+        use engine_rocks::{RocksSstWriterBuilder, raw::IngestExternalFileOptions, util};
+        use engine_traits::{
+            CF_DEFAULT, CF_LOCK, CF_WRITE, KvEngine, MiscExt, Peekable, SnapshotMiscExt, SstWriter,
+            SstWriterBuilder,
+        };
+        use kvproto::kvrpcpb::AssertionLevel;
+        use tempfile::Builder;
+        use txn_types::Mutation;
+
+        use crate::storage::{
+            kv::Modify,
+            mvcc::SHORT_VALUE_MAX_LEN,
+            txn::commands::{Prewrite, TypedCommand},
+        };
+
+        const INGEST_SEQUENCE_PAUSE_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MS";
+        const INGEST_SEQUENCE_MARKER_ENV: &str =
+            "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER";
+
+        env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
+
+        let path_dir = Builder::new()
+            .prefix("test_async_commit_recovery_false_rollback")
+            .tempdir()
+            .unwrap();
+        let marker_path = path_dir.path().join("after-last-sequence.marker");
+        env::set_var(INGEST_SEQUENCE_MARKER_ENV, marker_path.to_str().unwrap());
+
+        let mut engine = TestEngineBuilder::new()
+            .path(path_dir.path().join("db"))
+            .build()
+            .unwrap();
+        let rocks_db = engine.get_rocksdb();
+
+        let dummy_key = b"k0";
+        let target_key = b"k1";
+        let primary_key = b"primary-on-other-region";
+        let start_ts = TimeStamp::new(10);
+        let read_ts = TimeStamp::new(50);
+        let long_value = vec![b'v'; SHORT_VALUE_MAX_LEN + 1];
+        let mutations = vec![
+            Mutation::make_put(Key::from_raw(dummy_key), long_value.clone()),
+            Mutation::make_put(Key::from_raw(target_key), long_value.clone()),
+        ];
+        let prewrite_cmd = Prewrite::new(
+            mutations,
+            primary_key.to_vec(),
+            start_ts,
+            0,
+            false,
+            2,
+            TimeStamp::zero(),
+            TimeStamp::new(100),
+            Some(vec![]),
+            false,
+            AssertionLevel::Off,
+            Context::default(),
+        );
+
+        let prewrite_snapshot = engine.snapshot(Default::default()).unwrap();
+        let prewrite_lock_mgr = MockLockManager::new();
+        let mut prewrite_statistics = Default::default();
+        let prewrite_result = prewrite_cmd
+            .cmd
+            .process_write(
+                prewrite_snapshot,
+                WriteContext {
+                    lock_mgr: &prewrite_lock_mgr,
+                    concurrency_manager: ConcurrencyManager::new(start_ts),
+                    extra_op: Default::default(),
+                    statistics: &mut prewrite_statistics,
+                    async_apply_prewrite: false,
+                    raw_ext: None,
+                    txn_status_cache: Arc::new(TxnStatusCache::new_for_test()),
+                },
+            )
+            .unwrap();
+        match &prewrite_result.pr {
+            ProcessResult::PrewriteResult { result } => {
+                assert!(result.locks.is_empty());
+                assert!(!result.min_commit_ts.is_zero());
+                assert_eq!(result.one_pc_commit_ts, TimeStamp::zero());
+            }
+            other => panic!("unexpected prewrite result: {:?}", other),
+        }
+
+        let prewrite_modifies = prewrite_result.to_be_write.modifies;
+        let expected_dummy_default = Key::from_raw(dummy_key).append_ts(start_ts);
+        let expected_dummy_lock = Key::from_raw(dummy_key);
+        let expected_target_default = Key::from_raw(target_key).append_ts(start_ts);
+        let expected_target_lock = Key::from_raw(target_key);
+        match prewrite_modifies.as_slice() {
+            [
+                Modify::Put(cf0, key0, _),
+                Modify::Put(cf1, key1, _),
+                Modify::Put(cf2, key2, _),
+                Modify::Put(cf3, key3, _),
+            ] => {
+                assert_eq!(*cf0, CF_DEFAULT);
+                assert_eq!(key0, &expected_dummy_default);
+                assert_eq!(*cf1, CF_LOCK);
+                assert_eq!(key1, &expected_dummy_lock);
+                assert_eq!(*cf2, CF_DEFAULT);
+                assert_eq!(key2, &expected_target_default);
+                assert_eq!(*cf3, CF_LOCK);
+                assert_eq!(key3, &expected_target_lock);
+            }
+            other => panic!("unexpected async prewrite modifies: {:?}", other),
+        }
+
+        let sst_path = path_dir.path().join("ingest.sst");
+        let mut sst = RocksSstWriterBuilder::new()
+            .set_db(&rocks_db)
+            .set_cf(CF_DEFAULT)
+            .build(sst_path.to_str().unwrap())
+            .unwrap();
+        sst.put(b"ingest-key", b"ingest-value").unwrap();
+        sst.finish().unwrap();
+
+        // The ingest-write-bug rust-rocksdb branch pauses after RocksDB reads
+        // VersionSet::LastSequence and before it publishes the sequence consumed
+        // by the ingested file.
+        let _pre_ingest_snapshot = rocks_db.snapshot();
+        let ingest_db = rocks_db.clone();
+        let ingest_path = sst_path.to_str().unwrap().to_owned();
+        let ingest_thread = thread::spawn(move || {
+            let cf = util::get_cf_handle(ingest_db.as_inner(), CF_DEFAULT).unwrap();
+            let mut opts = IngestExternalFileOptions::new();
+            opts.move_files(true);
+            opts.snapshot_consistent(true);
+            opts.allow_global_seqno(true);
+            opts.set_write_global_seqno(false);
+            opts.set_allow_write(true);
+            opts.allow_blocking_flush(true);
+            ingest_db
+                .as_inner()
+                .ingest_external_file_cf(cf, &opts, &[ingest_path.as_str()])
+                .unwrap()
+        });
+
+        let wait_started = std::time::Instant::now();
+        while !marker_path.exists() {
+            assert!(
+                wait_started.elapsed() < Duration::from_secs(10),
+                "RocksDB did not enter the ingest sequence update hook"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        write(&engine, &Context::default(), prewrite_modifies);
+        let seq_after_prewrite = rocks_db.get_latest_sequence_number();
+
+        ingest_thread.join().unwrap();
+        env::remove_var(INGEST_SEQUENCE_PAUSE_ENV);
+        env::remove_var(INGEST_SEQUENCE_MARKER_ENV);
+        let _ = fs::remove_file(&marker_path);
+
+        let seq_after_ingest = rocks_db.get_latest_sequence_number();
+        assert!(
+            seq_after_ingest < seq_after_prewrite,
+            "ingest should regress latest sequence below the acknowledged async prewrite batch: after_ingest={}, after_prewrite={}",
+            seq_after_ingest,
+            seq_after_prewrite
+        );
+
+        let regressed_snapshot = rocks_db.snapshot();
+        assert_eq!(regressed_snapshot.sequence_number(), seq_after_ingest);
+        assert!(
+            regressed_snapshot
+                .get_value_cf(CF_DEFAULT, expected_dummy_default.as_encoded())
+                .unwrap()
+                .is_some(),
+            "the first record of the acknowledged async prewrite batch is visible"
+        );
+        assert!(
+            regressed_snapshot
+                .get_value_cf(CF_LOCK, expected_target_lock.as_encoded())
+                .unwrap()
+                .is_none(),
+            "the target secondary lock is hidden by the regressed sequence"
+        );
+        assert!(
+            regressed_snapshot
+                .get_value_cf(
+                    CF_WRITE,
+                    expected_target_lock.append_ts(start_ts).as_encoded()
+                )
+                .unwrap()
+                .is_none(),
+            "the target secondary has no commit or rollback record yet"
+        );
+        must_get_none(&mut engine, target_key, read_ts);
+
+        let check_snapshot = engine.snapshot(Default::default()).unwrap();
+        let check_lock_mgr = MockLockManager::new();
+        let mut check_statistics = Default::default();
+        let check_cmd: TypedCommand<SecondaryLocksStatus> = CheckSecondaryLocks::new(
+            vec![Key::from_raw(target_key)],
+            start_ts,
+            Context::default(),
+        );
+        let check_result = check_cmd
+            .cmd
+            .process_write(
+                check_snapshot,
+                WriteContext {
+                    lock_mgr: &check_lock_mgr,
+                    concurrency_manager: ConcurrencyManager::new(start_ts),
+                    extra_op: Default::default(),
+                    statistics: &mut check_statistics,
+                    async_apply_prewrite: false,
+                    raw_ext: None,
+                    txn_status_cache: Arc::new(TxnStatusCache::new_for_test()),
+                },
+            )
+            .unwrap();
+        match &check_result.pr {
+            ProcessResult::SecondaryLocksStatus { status } => {
+                assert_eq!(*status, SecondaryLocksStatus::RolledBack);
+            }
+            other => panic!("unexpected check-secondary result: {:?}", other),
+        }
+        assert!(
+            check_result
+                .to_be_write
+                .modifies
+                .iter()
+                .any(|m| matches!(m, Modify::Put(CF_WRITE, key, _) if key == &Key::from_raw(target_key).append_ts(start_ts))),
+            "CheckSecondaryLocks should persist a rollback record for the hidden secondary lock: {:?}",
+            check_result.to_be_write.modifies
+        );
+
+        write(
+            &engine,
+            &Context::default(),
+            check_result.to_be_write.modifies,
+        );
+        must_get_rollback_protected(&mut engine, target_key, start_ts, true);
+
+        // The recovery command has made a durable rollback decision for the
+        // acknowledged async prewrite. Even if later sequence advancement makes
+        // the hidden lock visible again, there is still no committed version for
+        // this mutation.
+        let read_snapshot = engine.snapshot(Default::default()).unwrap();
+        let mut reader = SnapshotReader::new(read_ts, read_snapshot, true);
+        assert_eq!(
+            reader.get(&Key::from_raw(target_key), read_ts).unwrap(),
+            None,
+            "the acknowledged async prewrite value should not be readable after the false rollback"
+        );
+    }
 }
