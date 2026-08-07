@@ -738,7 +738,7 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore = "requires tests/repro/issue-19891-rocksdb-hook.patch applied to rust-rocksdb"]
+    #[ignore = "requires the rust-rocksdb ingest-write-bug hook branch"]
     fn test_ingest_allow_write_can_make_pessimistic_commit_drop_mutation() {
         use std::{env, fs, thread, time::Duration};
 
@@ -824,8 +824,8 @@ pub mod tests {
         sst.put(b"ingest-key", b"ingest-value").unwrap();
         sst.finish().unwrap();
 
-        // Apply tests/repro/issue-19891-rocksdb-hook.patch to rust-rocksdb
-        // before running this ignored test.
+        // The ingest-write-bug rust-rocksdb branch applies the hook documented
+        // in tests/repro/issue-19891-rocksdb-hook.patch.
         let _pre_ingest_snapshot = rocks_db.snapshot();
         let ingest_db = rocks_db.clone();
         let ingest_path = sst_path.to_str().unwrap().to_owned();

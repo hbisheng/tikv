@@ -144,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires tests/repro/issue-19891-rocksdb-hook.patch applied to rust-rocksdb"]
+    #[ignore = "requires the rust-rocksdb ingest-write-bug hook branch"]
     fn test_ingest_allow_write_can_expose_committed_write_with_stale_lock() {
         env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
 
@@ -192,10 +192,10 @@ mod tests {
         sst.put(b"ingest-key", b"ingest-value").unwrap();
         sst.finish().unwrap();
 
-        // Apply tests/repro/issue-19891-rocksdb-hook.patch to rust-rocksdb
-        // before running this ignored test. The hook makes RocksDB pause after
-        // reading VersionSet::LastSequence and before publishing the consumed
-        // ingest sequence number.
+        // The ingest-write-bug rust-rocksdb branch applies the hook documented
+        // in tests/repro/issue-19891-rocksdb-hook.patch. It makes RocksDB pause
+        // after reading VersionSet::LastSequence and before publishing the
+        // consumed ingest sequence number.
         //
         // Holding a snapshot forces RocksDB to assign a global sequence number
         // to the ingested file. That makes DBImpl update VersionSet's last
