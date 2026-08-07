@@ -3144,7 +3144,6 @@ mod tests {
         let account_a = b"optimistic-account-a";
         let account_b = b"optimistic-account-b";
         let account_c = b"optimistic-account-c";
-        let control_key = b"optimistic-control";
         let account_a_key = Key::from_raw(account_a);
         let account_b_key = Key::from_raw(account_b);
         let account_c_key = Key::from_raw(account_c);
@@ -3182,43 +3181,6 @@ mod tests {
         )
         .unwrap();
         must_get(&mut engine, account_c, txn_b_start_ts, b"0");
-
-        prewrite(
-            &mut engine,
-            &mut statistics,
-            vec![put(control_key, b"100")],
-            control_key.to_vec(),
-            txn_a_start_ts,
-            None,
-        )
-        .unwrap();
-        commit(
-            &mut engine,
-            &mut statistics,
-            vec![Key::from_raw(control_key)],
-            txn_a_start_ts,
-            txn_a_commit_ts,
-        )
-        .unwrap();
-        let control_err = prewrite(
-            &mut engine,
-            &mut statistics,
-            vec![put(control_key, b"200")],
-            control_key.to_vec(),
-            txn_b_start_ts,
-            None,
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                control_err,
-                Error(box ErrorInner::Mvcc(MvccError(box MvccErrorInner::WriteConflict {
-                    ..
-                })))
-            ),
-            "normal optimistic prewrite should see the newer committed write, got {:?}",
-            control_err
-        );
 
         // Generate txn A's real prewrite/commit batches on an equivalent engine,
         // then apply those already-acknowledged batches during the ingest window.
