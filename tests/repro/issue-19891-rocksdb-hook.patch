@@ -1,0 +1,41 @@
+diff --git a/db/db_impl/db_impl.cc b/db/db_impl/db_impl.cc
+index 2041aeac9..f66463a80 100644
+--- a/db/db_impl/db_impl.cc
++++ b/db/db_impl/db_impl.cc
+@@ -13,13 +13,17 @@
+ #include <alloca.h>
+ #endif
+ 
++#include <chrono>
+ #include <cinttypes>
+ #include <cstdio>
++#include <cstdlib>
++#include <fstream>
+ #include <map>
+ #include <set>
+ #include <sstream>
+ #include <stdexcept>
+ #include <string>
++#include <thread>
+ #include <unordered_map>
+ #include <utility>
+ #include <vector>
+@@ -5984,6 +5988,18 @@ Status DBImpl::IngestExternalFiles(
+       }
+       if (consumed_seqno_count > 0) {
+         const SequenceNumber last_seqno = versions_->LastSequence();
++        if (const char* marker_path = std::getenv(
++                "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER")) {
++          std::ofstream(marker_path).close();
++        }
++        if (const char* pause_ms = std::getenv(
++                "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MS")) {
++          const int pause_ms_value = std::atoi(pause_ms);
++          if (pause_ms_value > 0) {
++            std::this_thread::sleep_for(
++                std::chrono::milliseconds(pause_ms_value));
++          }
++        }
+         versions_->SetLastAllocatedSequence(last_seqno + consumed_seqno_count);
+         versions_->SetLastPublishedSequence(last_seqno + consumed_seqno_count);
+         versions_->SetLastSequence(last_seqno + consumed_seqno_count);
