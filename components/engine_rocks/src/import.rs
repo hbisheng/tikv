@@ -16,6 +16,10 @@ use crate::{
 // Temporarily disabled due to https://github.com/tikv/tikv/issues/19891.
 const ENABLE_INGEST_ALLOW_WRITE: bool = false;
 
+fn should_allow_write_during_ingest(range: Option<&Range<'_>>, force_allow_write: bool) -> bool {
+    ENABLE_INGEST_ALLOW_WRITE && (range.is_some() || force_allow_write)
+}
+
 impl ImportExt for RocksEngine {
     type IngestExternalFileOptions = RocksIngestExternalFileOptions;
 
@@ -38,7 +42,7 @@ impl ImportExt for RocksEngine {
         let mut opts = RocksIngestExternalFileOptions::new();
         opts.move_files(true);
         opts.set_write_global_seqno(false);
-        let allow_write = ENABLE_INGEST_ALLOW_WRITE && (range.is_some() || force_allow_write);
+        let allow_write = should_allow_write_during_ingest(range.as_ref(), force_allow_write);
         opts.allow_write(allow_write);
         if allow_write {
             INGEST_EXTERNAL_FILE_ALLOW_WRITE_COUNTER
@@ -119,6 +123,18 @@ mod tests {
 
     use super::*;
     use crate::{RocksCfOptions, RocksDbOptions, RocksSstWriterBuilder, util::new_engine_opt};
+
+    #[test]
+    fn test_ingest_allow_write_is_disabled() {
+        let range = Range::new(b"key", b"kez");
+
+        // #19891 is mitigated by keeping RocksDB allow_write disabled even for
+        // snapshot-like ranged ingests and explicit force_allow_write requests.
+        assert!(!should_allow_write_during_ingest(None, false));
+        assert!(!should_allow_write_during_ingest(None, true));
+        assert!(!should_allow_write_during_ingest(Some(&range), false));
+        assert!(!should_allow_write_during_ingest(Some(&range), true));
+    }
 
     #[test]
     fn test_ingest_multiple_file() {

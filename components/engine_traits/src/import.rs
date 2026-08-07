@@ -9,9 +9,9 @@ pub trait ImportExt {
 
     /// Ingests external files into the specified column family.
     ///
-    /// If the range is specified, it enables `RocksDB
-    /// IngestExternalFileOptions.allow_write` and locks the
-    /// specified range.
+    /// If the range is specified, implementations can use it to coordinate
+    /// range-latched ingestion. RocksDB `allow_write` is implementation-gated
+    /// and may stay disabled even when a range is specified.
     fn ingest_external_file_cf(
         &self,
         cf: &str,
