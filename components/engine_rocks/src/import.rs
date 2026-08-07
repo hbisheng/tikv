@@ -115,14 +115,21 @@ impl IngestExternalFileOptions for RocksIngestExternalFileOptions {
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs, thread, time::Duration};
+
     use engine_traits::{
-        ALL_CFS, CF_DEFAULT, FlowControlFactorsExt, MiscExt, Mutable, SstWriter, SstWriterBuilder,
-        WriteBatch, WriteBatchExt,
+        ALL_CFS, CF_DEFAULT, CF_LOCK, CF_WRITE, FlowControlFactorsExt, KvEngine, MiscExt, Mutable,
+        Peekable, SnapshotMiscExt, SstWriter, SstWriterBuilder, SyncMutable, WriteBatch,
+        WriteBatchExt,
     };
     use tempfile::Builder;
+    use txn_types::{Key, Lock, LockType, TimeStamp, Write, WriteType};
 
     use super::*;
     use crate::{RocksCfOptions, RocksDbOptions, RocksSstWriterBuilder, util::new_engine_opt};
+
+    const INGEST_SEQUENCE_PAUSE_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MS";
+    const INGEST_SEQUENCE_MARKER_ENV: &str = "TIKV_REPRO_19891_INGEST_AFTER_LAST_SEQUENCE_MARKER";
 
     #[test]
     fn test_ingest_allow_write_is_disabled() {
@@ -134,6 +141,129 @@ mod tests {
         assert!(!should_allow_write_during_ingest(None, true));
         assert!(!should_allow_write_during_ingest(Some(&range), false));
         assert!(!should_allow_write_during_ingest(Some(&range), true));
+    }
+
+    #[test]
+    #[ignore = "requires a RocksDB hook that pauses after IngestExternalFiles reads LastSequence"]
+    fn test_ingest_allow_write_can_expose_committed_write_with_stale_lock() {
+        env::set_var(INGEST_SEQUENCE_PAUSE_ENV, "500");
+
+        let path_dir = Builder::new()
+            .prefix("test_ingest_allow_write_sequence_regression")
+            .tempdir()
+            .unwrap();
+        let root_path = path_dir.path();
+        let db_path = root_path.join("db");
+        let path_str = db_path.to_str().unwrap();
+        let marker_path = root_path.join("after-last-sequence.marker");
+        env::set_var(INGEST_SEQUENCE_MARKER_ENV, marker_path.to_str().unwrap());
+
+        let cfs_opts = ALL_CFS
+            .iter()
+            .map(|cf| (*cf, RocksCfOptions::default()))
+            .collect();
+        let db = new_engine_opt(path_str, RocksDbOptions::default(), cfs_opts).unwrap();
+
+        let raw_key = b"k1";
+        let encoded_key = Key::from_raw(raw_key);
+        let start_ts = TimeStamp::compose(5, 0);
+        let commit_ts = TimeStamp::compose(10, 0);
+        let min_commit_ts = TimeStamp::compose(15, 0);
+        let lock = Lock::new(
+            LockType::Put,
+            raw_key.to_vec(),
+            start_ts,
+            10,
+            Some(b"v1".to_vec()),
+            start_ts,
+            1,
+            min_commit_ts,
+            false,
+        );
+        db.put_cf(CF_LOCK, encoded_key.as_encoded(), &lock.to_bytes())
+            .unwrap();
+
+        let sst_path = root_path.join("ingest.sst");
+        let mut sst = RocksSstWriterBuilder::new()
+            .set_db(&db)
+            .set_cf(CF_DEFAULT)
+            .build(sst_path.to_str().unwrap())
+            .unwrap();
+        sst.put(b"ingest-key", b"ingest-value").unwrap();
+        sst.finish().unwrap();
+
+        // Holding a snapshot forces RocksDB to assign a global sequence number
+        // to the ingested file. That makes DBImpl update VersionSet's last
+        // sequence after LogAndApply, which is the race window for #19891.
+        let _pre_ingest_snapshot = db.snapshot();
+        let ingest_db = db.clone();
+        let ingest_path = sst_path.to_str().unwrap().to_owned();
+        let ingest_thread = thread::spawn(move || {
+            let cf = util::get_cf_handle(ingest_db.as_inner(), CF_DEFAULT).unwrap();
+            let mut opts = RocksIngestExternalFileOptions::new();
+            opts.move_files(true);
+            opts.0.snapshot_consistent(true);
+            opts.0.allow_global_seqno(true);
+            opts.set_write_global_seqno(false);
+            opts.allow_write(true);
+            ingest_db
+                .as_inner()
+                .ingest_external_file_optimized(cf, &opts.0, &[ingest_path.as_str()])
+                .unwrap()
+        });
+
+        let wait_started = std::time::Instant::now();
+        while !marker_path.exists() {
+            assert!(
+                wait_started.elapsed() < Duration::from_secs(10),
+                "RocksDB did not enter the ingest sequence update hook"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        // The operation order in this WriteBatch matters. A regressed snapshot
+        // at the ingested file's assigned seqno can see the committed write,
+        // but cannot see the following lock delete.
+        let write_record = Write::new(WriteType::Put, start_ts, Some(b"v1".to_vec()))
+            .as_ref()
+            .to_bytes();
+        let write_key = Key::from_raw(raw_key).append_ts(commit_ts);
+        let mut wb = db.write_batch();
+        wb.put_cf(CF_WRITE, write_key.as_encoded(), &write_record)
+            .unwrap();
+        wb.delete_cf(CF_LOCK, encoded_key.as_encoded()).unwrap();
+        wb.write().unwrap();
+        let seq_after_commit_batch = db.get_latest_sequence_number();
+
+        ingest_thread.join().unwrap();
+        env::remove_var(INGEST_SEQUENCE_PAUSE_ENV);
+        env::remove_var(INGEST_SEQUENCE_MARKER_ENV);
+        let _ = fs::remove_file(&marker_path);
+
+        let seq_after_ingest = db.get_latest_sequence_number();
+        assert!(
+            seq_after_ingest < seq_after_commit_batch,
+            "ingest should overwrite the foreground write sequence: after_ingest={}, after_commit={}",
+            seq_after_ingest,
+            seq_after_commit_batch
+        );
+
+        let snapshot = db.snapshot();
+        assert_eq!(snapshot.sequence_number(), seq_after_ingest);
+        assert!(
+            snapshot
+                .get_value_cf(CF_WRITE, write_key.as_encoded())
+                .unwrap()
+                .is_some(),
+            "the commit record is visible at the regressed snapshot"
+        );
+        assert!(
+            snapshot
+                .get_value_cf(CF_LOCK, encoded_key.as_encoded())
+                .unwrap()
+                .is_some(),
+            "the lock delete is hidden at the regressed snapshot"
+        );
     }
 
     #[test]

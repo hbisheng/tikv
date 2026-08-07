@@ -196,17 +196,16 @@ pub mod tests {
     use std::sync::Arc;
 
     use concurrency_manager::ConcurrencyManager;
-    use engine_traits::{CF_LOCK, CF_WRITE};
     use kvproto::kvrpcpb::{
         self, Context, LockInfo, PrewriteRequestPessimisticAction::*, WriteConflictReason,
     };
     use tikv_util::deadline::Deadline;
-    use txn_types::{Key, LastChange, Lock, LockType, Write, WriteType};
+    use txn_types::{Key, LastChange, WriteType};
 
     use super::{TxnStatus::*, *};
     use crate::storage::{
         ProcessResult, TestEngineBuilder,
-        kv::{Engine, Modify},
+        kv::Engine,
         lock_manager::MockLockManager,
         mvcc,
         mvcc::{ErrorInner, tests::*},
@@ -363,61 +362,6 @@ pub mod tests {
 
     fn lock_not_exist() -> impl FnOnce(TxnStatus) -> bool {
         move |s| s == LockNotExist
-    }
-
-    #[test]
-    #[should_panic(expected = "txn record found but not expected")]
-    fn test_check_txn_status_panics_on_committed_write_and_stale_lock() {
-        let mut engine = TestEngineBuilder::new().build().unwrap();
-        let key = b"k1";
-        let ts = TimeStamp::compose;
-        let start_ts = ts(5, 0);
-        let commit_ts = ts(10, 0);
-        let pushed_min_commit_ts = ts(15, 0);
-
-        // Reproduce the impossible MVCC state from #19891: a committed write
-        // and a stale primary lock coexist on the same key and start_ts.
-        let write_record = Write::new(WriteType::Put, start_ts, Some(b"v1".to_vec()))
-            .as_ref()
-            .to_bytes();
-        let stale_lock = Lock::new(
-            LockType::Put,
-            key.to_vec(),
-            start_ts,
-            10,
-            Some(b"v1".to_vec()),
-            start_ts,
-            1,
-            pushed_min_commit_ts,
-            false,
-        );
-
-        write(
-            &engine,
-            &Context::default(),
-            vec![
-                Modify::Put(
-                    CF_WRITE,
-                    Key::from_raw(key).append_ts(commit_ts),
-                    write_record,
-                ),
-                Modify::Put(CF_LOCK, Key::from_raw(key), stale_lock.to_bytes()),
-            ],
-        );
-        must_written(&mut engine, key, start_ts, commit_ts, WriteType::Put);
-        must_large_txn_locked(&mut engine, key, start_ts, 10, pushed_min_commit_ts, false);
-
-        must_success(
-            &mut engine,
-            key,
-            start_ts,
-            pushed_min_commit_ts,
-            ts(20, 0),
-            true,
-            false,
-            false,
-            |_| false,
-        );
     }
 
     #[test]
